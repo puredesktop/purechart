@@ -1,0 +1,889 @@
+{
+  "id": "chart",
+  "name": "PureChart",
+  "permissions": [
+    "filesystem",
+    "settings",
+    "assets",
+    "agents"
+  ],
+  "entrypoint": {
+    "kind": "dev-url",
+    "url": "http://localhost:5193"
+  },
+  "app": {
+    "id": "plugin.chart",
+    "slug": "chart",
+    "name": "PureChart",
+    "navigationLabel": "Chart",
+    "productName": "ps.chart",
+    "kind": "chart",
+    "description": "Turn CSV, JSON, or pasted tables into beautiful, exportable charts.",
+    "openableFileKinds": [
+      "data",
+      "folder"
+    ],
+    "openableExtensions": [
+      "csv",
+      "tsv"
+    ],
+    "openableNameSuffixes": [
+      ".chart",
+      ".chart.json"
+    ],
+    "createEntities": [
+      {
+        "id": "chart-package",
+        "label": "Chart",
+        "description": "Create a new chart package from CSV, JSON, or a pasted table.",
+        "kind": "package",
+        "appSlug": "chart",
+        "defaultName": "Untitled chart",
+        "packageSuffix": ".chart",
+        "packageManifestFile": "manifest.json",
+        "packageContentFile": "chart.json",
+        "packageAssetsDir": "assets",
+        "template": "{\n  \"schemaVersion\": 1,\n  \"title\": \"Untitled chart\",\n  \"data\": { \"mode\": \"inline\", \"inline\": { \"format\": \"csv\", \"text\": \"\" } },\n  \"chart\": { \"type\": \"line\", \"encodings\": {}, \"style\": {} }\n}\n"
+      }
+    ],
+    "agents": {
+      "tools": [
+        {
+          "name": "getChartContext",
+          "risk": "read",
+          "description": "Call this first. Returns the current chart tab context: document path (a .chart package, a legacy .chart.json file, or null while unsaved), title, type, encodings, style, annotation count, and a data summary (columns with types, row count). Column names must be used exactly as returned here.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "getChartSpec",
+          "risk": "read",
+          "description": "Return the current PureChart spec with the inline data text elided (only its format and size are reported). Use getChartData for the rows.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "getChartData",
+          "risk": "read",
+          "description": "Return the current chart data columns (with inferred types) and the first rows, capped at 500. Call before choosing encodings or making data-dependent recommendations.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "number",
+                "description": "Maximum rows to return, capped at 500."
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "listCharts",
+          "risk": "read",
+          "description": "Every chart on this sheet, with its id, name, form, encodings, caption and how many Second look findings it has. A document holds several readings of one table, so \"the chart\" is ambiguous until you know which — call this before acting on one, and pass the id. The data and the palette belong to the sheet; everything else belongs to a chart.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "suggestChartForms",
+          "risk": "read",
+          "description": "Return the chart forms this table can honestly support, best first, each with the job it does ('How each region moved'), the encodings that make it work, and — for the ones it cannot support — the reason. Call this before setChartType: the table decides which forms are available, and a form it does not support will draw something misleading rather than fail. Apply one with chooseChartForm.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "reviewChart",
+          "risk": "read",
+          "description": "Measure the drawing and report what is wrong with it, located: pairs of series ordinary or colour-deficient vision cannot separate (OKLab distance under simulated protanopia and deuteranopia), colours too pale for the surface, series past what the palette can name, bars that do not start at zero, labels that collide. Call it after any change to type, encodings, palette or series count, and fix what it names with applyChartFix — you cannot tell by looking at the spec whether the colours work.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "describeChart",
+          "risk": "read",
+          "description": "What the chart says, as arithmetic over the drawn series — the steepest rise, how many steps go down, whether the order ever changes — each with the working behind it, plus the spoken description a screen reader is handed. Quote these for a caption instead of reading a trend off the shape of the lines; they cannot describe a chart other than the one drawn.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "createChart",
+          "risk": "destructive",
+          "description": "Create a new unsaved chart in the current tab, optionally seeded with CSV, TSV, or JSON table text; encodings are suggested from the data. This replaces whatever the tab holds — say so when the tab has work. The chart becomes a .chart package draft on its first change; saveChart names the path.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "dataText": {
+                "type": "string",
+                "description": "CSV, TSV, or JSON table text to use as inline chart data."
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "csv",
+                  "tsv",
+                  "json"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "area",
+                  "bar",
+                  "grouped-bar",
+                  "stacked-bar",
+                  "scatter",
+                  "connected-scatter",
+                  "lollipop",
+                  "slopegraph",
+                  "histogram"
+                ]
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "openChart",
+          "risk": "read",
+          "description": "Open a chart document (.chart package folder or legacy .chart.json file) or a CSV/TSV/JSON data file by absolute path in the current tab. Fails with a message when the path cannot be read.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartTitle",
+          "description": "Set the current chart title.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartType",
+          "description": "Set the current chart type.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "area",
+                  "bar",
+                  "grouped-bar",
+                  "stacked-bar",
+                  "scatter",
+                  "connected-scatter",
+                  "lollipop",
+                  "slopegraph",
+                  "histogram"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartEncodings",
+          "description": "Set the x axis column, y measure columns, and/or the series grouping column. Any field left out is unchanged; pass null for x or series to clear it, and [] for y to clear the measures. Column names must exist in getChartData.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "string",
+                "description": "Column for the x axis. Omit to keep the current one; null clears it."
+              },
+              "y": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Numeric columns to plot; each becomes a series. Omit to keep the current measures."
+              },
+              "series": {
+                "type": "string",
+                "description": "Column whose values split the first y measure into series. Omit to keep the current setting; null clears it."
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartPalette",
+          "description": "Set the current chart color palette, or create and select a custom palette from hex colors.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "palette": {
+                "type": "string",
+                "description": "Built-in palette id (quiet, science, meadow, ember, mono) or custom palette id."
+              },
+              "label": {
+                "type": "string",
+                "description": "Label for a new custom palette when colors are provided."
+              },
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Custom #RRGGBB colors to create and select."
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartStyle",
+          "description": "Set style options: rangeFrame (axes span only the data), grid (faint gridlines), directLabels (series labelled at line end), rug (marginal ticks at each point), strokeWidth (>0), pointRadius (>=0). Fields left out are unchanged.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "rangeFrame": {
+                "type": "boolean"
+              },
+              "grid": {
+                "type": "boolean"
+              },
+              "directLabels": {
+                "type": "boolean"
+              },
+              "rug": {
+                "type": "boolean"
+              },
+              "strokeWidth": {
+                "type": "number"
+              },
+              "pointRadius": {
+                "type": "number"
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "updateChart",
+          "description": "Update several chart properties at once: title, type, encodings (x, y, series) and style. Fields left out are unchanged — sending only type never touches the encodings. For a single change prefer the focused set* tools.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "area",
+                  "bar",
+                  "grouped-bar",
+                  "stacked-bar",
+                  "scatter",
+                  "connected-scatter",
+                  "lollipop",
+                  "slopegraph",
+                  "histogram"
+                ]
+              },
+              "x": {
+                "type": "string"
+              },
+              "y": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "series": {
+                "type": "string"
+              },
+              "style": {
+                "type": "object",
+                "properties": {
+                  "rangeFrame": {
+                    "type": "boolean"
+                  },
+                  "grid": {
+                    "type": "boolean"
+                  },
+                  "directLabels": {
+                    "type": "boolean"
+                  },
+                  "rug": {
+                    "type": "boolean"
+                  },
+                  "palette": {
+                    "type": "string"
+                  },
+                  "strokeWidth": {
+                    "type": "number"
+                  },
+                  "pointRadius": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "proposeChart",
+          "risk": "write",
+          "description": "Preview a coordinated chart edit without modifying the document. Provide a patch and explain data/design choices. The user reviews the preview and applies or discards it in PureChart. Returns changes, validation notes and computed findings. A later proposal replaces the pending preview. Use captionFindingIds from the proposed findings to generate a data-grounded caption; free-form wording is marked for review. Applying is one undoable edit. Source data cannot be changed by this tool.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "patch": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "line",
+                      "area",
+                      "bar",
+                      "grouped-bar",
+                      "stacked-bar",
+                      "scatter",
+                      "connected-scatter",
+                      "lollipop",
+                      "slopegraph",
+                      "histogram"
+                    ]
+                  },
+                  "x": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "y": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "series": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "style": {
+                    "type": "object",
+                    "properties": {
+                      "rangeFrame": {
+                        "type": "boolean"
+                      },
+                      "grid": {
+                        "type": "boolean"
+                      },
+                      "directLabels": {
+                        "type": "boolean"
+                      },
+                      "rug": {
+                        "type": "boolean"
+                      },
+                      "palette": {
+                        "type": "string"
+                      },
+                      "strokeWidth": {
+                        "type": "number"
+                      },
+                      "pointRadius": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "axes": {
+                    "type": "object",
+                    "description": "axes configuration matching getChartSpec. Omitted fields at the patch level remain unchanged."
+                  },
+                  "facet": {
+                    "type": "object",
+                    "description": "facet configuration matching getChartSpec. Omitted fields at the patch level remain unchanged."
+                  },
+                  "transform": {
+                    "type": "object",
+                    "description": "transform configuration matching getChartSpec. Omitted fields at the patch level remain unchanged."
+                  },
+                  "presentation": {
+                    "type": "object",
+                    "description": "presentation configuration matching getChartSpec. Omitted fields at the patch level remain unchanged."
+                  },
+                  "caption": {
+                    "type": "string"
+                  },
+                  "annotations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    },
+                    "description": "Complete replacement annotation list; targets must exist in proposed plotted data."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "explanation": {
+                "type": "string"
+              },
+              "captionFindingIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "patch",
+              "explanation"
+            ],
+            "additionalProperties": false
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "chooseChartForm",
+          "risk": "write",
+          "description": "Apply one of suggestChartForms' candidates by its index. It ADDS a chart to the sheet and focuses it, because a document holds several readings of one table and replacing the one in front of you throws away work nobody asked to lose; the new chart is named after the job it does. Pass replace: true to change the focused chart instead. Call suggestChartForms first — the indexes are its order. Refuses a form this table cannot support, and says why.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "form": {
+                "type": "number",
+                "description": "The candidate's index in the suggestChartForms list."
+              },
+              "replace": {
+                "type": "boolean",
+                "description": "Change the focused chart instead of adding one. Defaults to false."
+              }
+            },
+            "required": [
+              "form"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "applyChartFix",
+          "risk": "write",
+          "description": "Carry out one of the fixes reviewChart offered, then report what is left. Name the finding by its id and the fix by its index within that finding (default 0). This closes the loop: draw, review, fix, review.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "finding": {
+                "type": "string",
+                "description": "The finding's id, exactly as reviewChart reported it."
+              },
+              "fix": {
+                "type": "number",
+                "description": "Which of that finding's fixes, by index. Defaults to the first."
+              }
+            },
+            "required": [
+              "finding"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "facetChart",
+          "risk": "write",
+          "description": "Split the chart into one panel per value of a column, all on one shared y scale. This is the honest answer to more series than the palette can keep apart, and it gets clearer as the categories multiply. Pass no column to go back to one chart. Refuses a column with fewer than two values.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "column": {
+                "type": "string",
+                "description": "The categorical column to split by. Omit or pass an empty string to stop faceting."
+              },
+              "columns": {
+                "type": "number",
+                "description": "Panels per row. 0 lets the grid choose."
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartAxis",
+          "risk": "write",
+          "description": "Name an axis and say how its numbers read. An axis labelled with a bare column name carries that ambiguity into every document the figure is placed in — 'rating' is out of what? Fields left out are unchanged; pass an empty string to clear one.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "axis": {
+                "type": "string",
+                "enum": [
+                  "x",
+                  "y"
+                ],
+                "description": "Which axis."
+              },
+              "name": {
+                "type": "string",
+                "description": "What it is called. Empty string falls back to the column name."
+              },
+              "unit": {
+                "type": "string",
+                "description": "minutes, NZ$, % — shown once, not on every tick."
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "plain",
+                  "grouped",
+                  "percent",
+                  "compact"
+                ],
+                "description": "grouped: 1,240. compact: 1.2k."
+              }
+            },
+            "required": [
+              "axis"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartCaption",
+          "risk": "write",
+          "description": "Write the sentence under the chart. Call describeChart first and say what its findings say: the arithmetic is what makes a caption true, and you are what makes it worth reading and what can say WHY something happened, which no amount of arithmetic can. What you must not do is describe a shape the numbers do not have — the result returns the findings again so a wrong claim can be caught in the same turn it was made. An empty string clears it. The caption travels with the figure into every document that carries it.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "caption": {
+                "type": "string",
+                "description": "The sentence. Empty clears it."
+              }
+            },
+            "required": [
+              "caption"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "focusChart",
+          "risk": "write",
+          "description": "Work on one of the sheet's charts, by the id listCharts reports. Pass nothing to step back to the sheet itself. Every other tool acts on the focused chart, so focus before editing.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "chart": {
+                "type": "string",
+                "description": "The chart's id. Omit to show the whole sheet."
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "duplicateChart",
+          "risk": "write",
+          "description": "Copy a chart and put the copy beside it, then focus the copy. The honest way to try a variation: change one thing on the copy and both readings survive.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "chart": {
+                "type": "string",
+                "description": "The chart's id, from listCharts."
+              }
+            },
+            "required": [
+              "chart"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "removeChart",
+          "risk": "destructive",
+          "description": "Take a chart off the sheet. Only at the user's explicit direction — a chart they made is work, and the sheet is where it lives. The sheet always keeps at least one chart.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "chart": {
+                "type": "string",
+                "description": "The chart's id, from listCharts."
+              }
+            },
+            "required": [
+              "chart"
+            ]
+          },
+          "requiresApproval": true
+        },
+        {
+          "name": "replaceChartData",
+          "risk": "destructive",
+          "description": "Replace the current chart's inline data with CSV, TSV, or JSON table text, keeping the spec (title, type, style, annotations). Encodings are re-suggested only when resetChart is true or the current x column is unset.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "dataText": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "csv",
+                  "tsv",
+                  "json"
+                ]
+              },
+              "resetChart": {
+                "type": "boolean",
+                "description": "When true, re-suggest encodings from the new data."
+              }
+            },
+            "required": [
+              "dataText"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "addChartAnnotation",
+          "description": "Append a saved annotation to the chart. A point annotation calls out one data point: { text, target: { kind: 'point', seriesKey, xLabel, value } } where seriesKey is the y column name (or the series value when a series column is set), xLabel is the x value as text exactly as getChartData shows it, and value is the y value. A range annotation shades a span: { text, target: { kind: 'range', x: { from, to }, y: { from, to }, summary: { count, min, max, average, change } } } with x.from/x.to as x labels and y in data units — read getChartData to compute the summary yourself. Both forms are stored as data, so they land on the same points at any size.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "annotation": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "The label drawn beside the point."
+                  },
+                  "target": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "point",
+                          "range"
+                        ]
+                      },
+                      "seriesKey": {
+                        "type": "string",
+                        "description": "point: the series name."
+                      },
+                      "xLabel": {
+                        "type": "string",
+                        "description": "point: the x label exactly as getChartData shows it."
+                      },
+                      "value": {
+                        "type": "number",
+                        "description": "point: the y value."
+                      },
+                      "x": {
+                        "type": "object",
+                        "description": "range: x labels of the first and last point in the span.",
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to"
+                        ]
+                      },
+                      "y": {
+                        "type": "object",
+                        "description": "range: y extent in data units.",
+                        "properties": {
+                          "from": {
+                            "type": "number"
+                          },
+                          "to": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to"
+                        ]
+                      },
+                      "summary": {
+                        "type": "object",
+                        "description": "range: figures for the points in the span.",
+                        "properties": {
+                          "count": {
+                            "type": "number"
+                          },
+                          "min": {
+                            "type": "number"
+                          },
+                          "max": {
+                            "type": "number"
+                          },
+                          "average": {
+                            "type": "number"
+                          },
+                          "change": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "count",
+                          "min",
+                          "max",
+                          "average",
+                          "change"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  }
+                },
+                "required": [
+                  "text",
+                  "target"
+                ]
+              }
+            },
+            "required": [
+              "annotation"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "clearChartAnnotations",
+          "risk": "destructive",
+          "description": "Remove all annotations from the current chart.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "saveChart",
+          "description": "Save the open chart, creating its .chart package draft in PureDrafts when it has never been saved, and return the path.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "exportChart",
+          "risk": "external",
+          "description": "Render the chart to SVG or PNG. Renders from the spec, so it works whether or not the chart is on screen. Without a destination the file lands in the chart document's own assets/figures folder (a never-saved chart gets its draft package first). With one, it lands in that folder instead — how a figure is placed into a deck, a report or a manuscript rather than left where only this chart can find it. Give width/height for the size the page needs, and scale for print. The result names the path.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "svg",
+                  "png"
+                ],
+                "description": "Defaults to svg."
+              },
+              "destination": {
+                "type": "string",
+                "description": "Absolute folder (or document package) to write into. Defaults to this chart's own assets/figures."
+              },
+              "width": {
+                "type": "number",
+                "description": "Drawing width in px. Defaults to the size on screen."
+              },
+              "height": {
+                "type": "number",
+                "description": "Drawing height in px."
+              },
+              "scale": {
+                "type": "number",
+                "description": "PNG only. Pixels per unit: 3 for print. Defaults to 1."
+              },
+              "transparent": {
+                "type": "boolean",
+                "description": "Leave the ground unpainted, for a figure on a coloured page."
+              },
+              "palette": {
+                "type": "string",
+                "enum": ["source", "monochrome"],
+                "description": "The chart’s own colours (default), or one ink for a print edition. The figure remembers which."
+              }
+            }
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "deleteChartDocument",
+          "risk": "destructive",
+          "description": "Delete a chart document by absolute path: a .chart package folder or a legacy .chart.json file. Only at the user's explicit direction.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Absolute path ending in .chart or .chart.json."
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "requiresApproval": true
+        }
+      ]
+    }
+  }
+}

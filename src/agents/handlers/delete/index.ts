@@ -1,0 +1,1 @@
+export { deleteChartDocumentHandler } from './deleteChartDocument'

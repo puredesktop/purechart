@@ -1,0 +1,14 @@
+{
+  "sourceRepository": "https://github.com/Nikau-Dev/purechart",
+  "sourceCommit": "57b840f7d99c7529ddc2bff32e8b68f8a798967f",
+  "sourceBranch": "main",
+  "snapshotDate": "2026-09-25",
+  "historyIncluded": false,
+  "changes": [
+    "README licensing, attribution, and contribution information",
+    "Contribution guide and third-party notices",
+    "MIT license for original app code except MPL-covered PureCut",
+    "Preserved upstream licenses; added missing font notices where bundled",
+    "Removed bundled demo data and development records; sanitized personal examples and machine paths"
+  ]
+}
