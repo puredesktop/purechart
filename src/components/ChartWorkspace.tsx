@@ -71,10 +71,7 @@ const StyledRoot = styled.div`
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: radial-gradient(ellipse at 8% 0%, #b4eaff, transparent 60%),
-    radial-gradient(ellipse at 100% 0%, #c6f4ee, transparent 60%),
-    linear-gradient(145deg, #f3f7ff 35%, #faf6ed);
-  :root[data-platform-appearance='white'] & { background: #fff; }
+  background: transparent;
   color: var(--purechart-text);
   font-family: var(--platform-typography-font-family);
   font-size: var(--pure-chrome-ui-size);
@@ -261,8 +258,7 @@ const StyledCanvasArea = styled.div`
   overflow: hidden;
 `
 
-// The chart sits on the platform paper slab (white in the light, a lighter
-// slab on dusk in the dark) so the frame never paints a white block.
+// The workspace is frosted; chart/export colours belong to the drawing.
 const StyledCanvasFrame = styled(PaperSurface)`
   display: flex;
   /* The caption belongs under the chart. PaperSurface lays out in a row by
@@ -278,6 +274,7 @@ const StyledCanvasFrame = styled(PaperSurface)`
   border-radius: 12px;
   border: 1px solid var(--purechart-border);
   box-shadow: none;
+  && { background: var(--glass-panel); }
 `
 
 const StyledChartStage = styled.div`
