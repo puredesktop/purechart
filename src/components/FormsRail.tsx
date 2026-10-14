@@ -4,6 +4,7 @@ import { renderChartSvg } from '../lib/chartRender'
 import { applyForm, suggestForms, type FormCandidate } from '../lib/chartForms'
 import type { ChartSpec } from '../lib/chartSpec'
 import type { DataTable } from '../lib/dataParse'
+import { enterprise } from '../enterpriseLook'
 
 /**
  * The forms this table can show, drawn from this table.
@@ -105,6 +106,7 @@ const StyledHeading = styled.h2`
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--purechart-muted);
+  ${enterprise} & { font-size: 12px; letter-spacing: normal; text-transform: none; }
 `
 
 const StyledCard = styled.button<{ $chosen: boolean; $supported: boolean }>`

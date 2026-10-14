@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { styled } from 'styled-components'
 import type { ChartSession } from '../hooks/useChartSession'
 import { proposalBase } from '../lib/chartProposal'
+import { enterprise } from '../enterpriseLook'
 
 export function ChartProposalPanel({ session }: { session: ChartSession }) {
   const [error, setError] = useState<string | null>(null)
@@ -25,6 +26,8 @@ export function ChartProposalPanel({ session }: { session: ChartSession }) {
 }
 const Panel = styled.section`
   border: 1px solid var(--purechart-border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
+  ${enterprise} & button { border-radius: 2px; }
   h3, p, ul { margin: 0; } h3 { font-size: 14px; } p, li, summary { font-size: 12px; line-height: 1.5; }
   ul { padding-left: 16px; } small { display: block; color: var(--purechart-muted); font-size: 11px; }
   button { cursor: pointer; border: 1px solid var(--purechart-border); border-radius: 4px; background: var(--purechart-panel); color: var(--purechart-text); padding: 6px; font: inherit; }

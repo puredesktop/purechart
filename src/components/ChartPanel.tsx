@@ -1,4 +1,5 @@
 import { styled } from 'styled-components'
+import { enterprise } from '../enterpriseLook'
 
 /** Shared form rhythm for the chart inspectors; chart marks keep their own theme. */
 export const ChartPanel = styled.section`
@@ -18,6 +19,7 @@ export const ChartPanel = styled.section`
     border-radius: 7px;
     background: var(--purechart-panel);
   }
+  ${enterprise} & :is(input:not([type=checkbox]), button) { border-radius: var(--pure-chrome-radius, 3px); }
   input:not([type=checkbox]) { width: 100%; }
   input[type=checkbox] { margin: 0; accent-color: var(--purechart-focus); }
   button { cursor: pointer; font-size: 12px; font-weight: 500; }

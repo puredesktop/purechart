@@ -3,6 +3,7 @@ import { styled } from 'styled-components'
 import { dataGrid, type DataEdit } from '../lib/dataEditing'
 import { SelectField } from './SelectField'
 import type { ColumnTypes, ColumnType, DataTable } from '../lib/dataParse'
+import { enterprise } from '../enterpriseLook'
 
 const ROW_HEIGHT = 32
 const WINDOW_ROWS = 32
@@ -74,6 +75,7 @@ export function DataGridEditor({ table, sourceText, onEdit, columnTypes = {} }: 
 const Root = styled.div`
   min-width: 0;
   button { border: 1px solid var(--purechart-border); background: var(--purechart-panel); color: var(--purechart-text); border-radius: 4px; font: inherit; padding: 4px 8px; cursor: pointer; }
+  ${enterprise} & button { border-radius: 2px; }
   button:disabled { opacity: .4; cursor: default; }
   input:focus-visible, button:focus-visible { outline: 2px solid var(--purechart-focus); outline-offset: -2px; }
 `
