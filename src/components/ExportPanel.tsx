@@ -5,6 +5,7 @@ import type { ChartSession } from '../hooks/useChartSession'
 import { renderChartSvg } from '../lib/chartRender'
 import { SelectField } from './SelectField'
 import { sayStale, type FigurePalette } from '../lib/chartFigures'
+import { enterprise } from '../enterpriseLook'
 const PRESETS = [
   { id: 'report', label: 'Report figure', width: 1200, height: 800, scale: 1 },
   { id: 'slides', label: 'Slides · 16:9', width: 1600, height: 900, scale: 1 },
@@ -66,6 +67,7 @@ const Panel = ChartPanel
 const Figures = styled.section`
   display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--purechart-border);
   h4 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; }
+  ${enterprise} & h4 { font-weight: 600; text-transform: none; letter-spacing: normal; }
   p[data-stale] { color: var(--purechart-warning, #a15c00); }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   li { display: grid; grid-template-columns: 1fr auto auto; column-gap: 8px; align-items: center; font-size: 13px; }

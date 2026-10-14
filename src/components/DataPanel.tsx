@@ -8,6 +8,7 @@ import {
 import type { DataTable } from '../lib/dataParse'
 import type { SheetChart } from '../lib/chartSheet'
 import { chartDataImpact } from '../lib/chartDataImpact'
+import { enterprise } from '../enterpriseLook'
 
 
 interface DataPanelProps {
@@ -67,6 +68,7 @@ const StyledChip = styled(MetaText)`
   border: 1px solid var(--purechart-border-soft);
   border-radius: 6px;
   background: var(--purechart-panel-subtle);
+  ${enterprise} & { border-radius: 2px; font-family: var(--platform-typography-font-family); }
 `
 
 const StyledRow = styled.div`

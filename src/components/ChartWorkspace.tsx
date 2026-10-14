@@ -34,6 +34,7 @@ import { FormsRail } from './FormsRail'
 import { SecondLookPanel } from './SecondLookPanel'
 import { SheetView } from './SheetView'
 import { TableDrawer } from './TableDrawer'
+import { enterprise } from '../enterpriseLook'
 
 //#region styled-components
 
@@ -64,6 +65,10 @@ const StyledRoot = styled.div`
   --platform-empty-state-padding: var(--platform-spacing-lg, 24px);
   --platform-empty-state-title-size: 14px;
   --platform-empty-state-message-width: 24rem;
+  ${enterprise} & {
+    --purechart-radius-control: var(--pure-chrome-radius, 3px);
+    --purechart-radius-panel: var(--pure-chrome-radius, 3px);
+  }
 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -122,6 +127,7 @@ const StyledTabs = styled.nav`
   border: 1px solid var(--purechart-border);
   border-radius: 10px;
   background: var(--purechart-panel-subtle);
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
 `
 
 const StyledTab = styled.button`
@@ -143,6 +149,8 @@ const StyledTab = styled.button`
     font-weight: 600;
   }
   &:focus-visible { outline: 2px solid var(--purechart-focus); outline-offset: 2px; }
+  ${enterprise} & { border-radius: 2px; }
+  ${enterprise} &[aria-pressed='true'] { box-shadow: none; }
 `
 
 const StyledMain = styled.section`
@@ -227,6 +235,7 @@ const StyledHeaderActions = styled.div`
 
 const StyledHeaderExportButton = styled(ToolbarSelect)`
   && { min-height: 32px; border-radius: 7px; padding: 0 10px; font-size: 12px; }
+  ${enterprise} && { border-radius: var(--pure-chrome-radius, 3px); }
   cursor: pointer;
 
   &:hover:not(:disabled) {
@@ -275,6 +284,7 @@ const StyledCanvasFrame = styled(PaperSurface)`
   border: 1px solid var(--purechart-border);
   box-shadow: none;
   && { background: var(--glass-panel); }
+  ${enterprise} && { border-radius: var(--pure-chrome-radius, 3px); }
 `
 
 const StyledChartStage = styled.div`
@@ -302,6 +312,7 @@ const StyledRailContent = styled.div`
   padding: 20px 0 0;
   min-width: 0;
   > h2 { margin: 0; font-size: 16px; font-weight: 650; }
+  ${enterprise} & > h2 { font-size: 14px; font-weight: 600; }
   p { line-height: 1.5; }
   details > summary { padding: 8px 0; font-size: 12px; font-weight: 600; cursor: pointer; }
   button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
@@ -321,6 +332,7 @@ const StyledStatus = styled(MetaText)`
   border-top: 1px solid var(--pure-chrome-line);
   background: var(--pure-chrome-bar);
   white-space: normal;
+  ${enterprise} & { font-family: var(--platform-typography-font-family); }
 `
 
 //#endregion
@@ -619,6 +631,7 @@ const StyledFiguresBehind = styled.p`
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin: 0 0 8px; padding: 6px 8px; font-size: 12px;
   border: 1px solid var(--purechart-border); border-radius: 6px;
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
   color: var(--purechart-warning, #a15c00);
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
 `

@@ -5,6 +5,7 @@ import {
   type ChartReview,
 } from '../lib/chartReview'
 import type { ChartSpec } from '../lib/chartSpec'
+import { enterprise } from '../enterpriseLook'
 
 /**
  * Second look, on screen.
@@ -136,6 +137,7 @@ const StyledHeading = styled.h2`
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--purechart-muted);
+  ${enterprise} & { font-size: 12px; letter-spacing: normal; text-transform: none; }
 `
 
 const StyledCount = styled.span`
@@ -174,6 +176,7 @@ const StyledTag = styled.span<{ $severity: ChartFinding['severity'] }>`
   font-size: var(--platform-typography-font-size-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  ${enterprise} & { letter-spacing: normal; text-transform: none; font-weight: 600; }
   background: ${({ $severity }) =>
     $severity === 'blocking'
       ? 'var(--pure-danger-text)'
@@ -244,6 +247,7 @@ const StyledClearedHeading = styled.span`
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--purechart-muted);
+  ${enterprise} & { font-size: 12px; font-weight: 600; letter-spacing: normal; text-transform: none; }
 `
 
 const StyledClearedList = styled.ul`

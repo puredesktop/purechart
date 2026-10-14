@@ -9,6 +9,7 @@ import { reviewChart } from '../lib/chartReview'
 import { specForChart, type ChartSheet } from '../lib/chartSheet'
 import type { ChartSpec } from '../lib/chartSpec'
 import type { DataTable } from '../lib/dataParse'
+import { enterprise } from '../enterpriseLook'
 
 /**
  * The sheet: every reading of this table, at once.
@@ -207,6 +208,7 @@ const StyledCard = styled.div`
   overflow: hidden;
   transition: border-color 120ms ease, box-shadow 120ms ease;
   &:hover { border-color: var(--purechart-focus); box-shadow: 0 3px 12px #00000008; }
+  ${enterprise} &:hover { box-shadow: none; }
 
   &:focus-within button[data-card-action],
   &:hover button[data-card-action] {
@@ -396,6 +398,7 @@ const StyledMenuHead = styled.div`
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--purechart-muted);
+  ${enterprise} & { font-size: 12px; font-weight: 600; letter-spacing: normal; text-transform: none; }
 
   button {
     opacity: 1;

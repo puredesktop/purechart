@@ -11,6 +11,7 @@ import type { InteractionMode } from '../lib/chartInteraction'
 import type { DataTable } from '../lib/dataParse'
 import type { ChartSession } from '../hooks/useChartSession'
 import { SelectField, type SelectOption } from './SelectField'
+import { enterprise } from '../enterpriseLook'
 
 const NONE_ID = '__none__'
 
@@ -132,6 +133,7 @@ const StyledSegmentedWrap = styled.div`
   --platform-colors-border: var(--purechart-border);
   --platform-colors-surface-hover: var(--purechart-panel-subtle);
   --platform-radius-sm: 7px;
+  ${enterprise} & { --platform-radius-sm: var(--pure-chrome-radius, 3px); }
 
   button[aria-pressed='true'] {
     border-bottom: 0;
@@ -142,6 +144,13 @@ const StyledSegmentedWrap = styled.div`
   button[aria-pressed='true']:hover {
     background: var(--app-bg);
     color: var(--app-text);
+  }
+
+  ${enterprise} & button[aria-pressed='true'],
+  ${enterprise} & button[aria-pressed='true']:hover {
+    background: var(--pure-chrome-selection);
+    color: var(--platform-colors-text);
+    font-weight: 600;
   }
 `
 
@@ -185,6 +194,21 @@ const StyledToggleButton = styled.button<{ $selected?: boolean }>`
   &:disabled {
     cursor: not-allowed;
     opacity: 0.62;
+  }
+
+  /* Selected reads as pressed in neutral ink, not the app's tint. */
+  ${enterprise} && {
+    border-color: ${({ $selected }) =>
+      $selected ? 'var(--platform-colors-border-strong)' : 'var(--purechart-border-soft)'};
+    background: ${({ $selected }) =>
+      $selected ? 'var(--pure-chrome-selection)' : 'var(--purechart-panel)'};
+    color: var(--platform-colors-text);
+    font-weight: ${({ $selected }) => ($selected ? 600 : 500)};
+  }
+  ${enterprise} &&:hover:not(:disabled) {
+    border-color: var(--platform-colors-border-strong);
+    background: ${({ $selected }) =>
+      $selected ? 'var(--pure-chrome-selection)' : 'var(--purechart-panel-subtle)'};
   }
 `
 
