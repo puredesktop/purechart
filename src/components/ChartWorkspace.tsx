@@ -6,6 +6,8 @@ import { PresentationPanel } from './PresentationPanel'
 import { ExportPanel } from './ExportPanel'
 import { CalculationsPanel } from './CalculationsPanel'
 import { useEffect, useMemo, useState } from 'react'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { PlatformIcon } from '@purescience/platform-ui/components/chrome/PlatformIcon'
 import type { CSSProperties, RefObject } from 'react'
 import { EmptyState } from '@purescience/platform-ui/components/common/feedback/EmptyState'
 import { InlineBanner } from '@purescience/platform-ui/components/common/feedback/InlineBanner'
@@ -25,6 +27,7 @@ import { openAssistantDrawer } from '../bridge/platformBridge'
 import type { InteractionMode } from '../lib/chartInteraction'
 import type { ChartSession } from '../hooks/useChartSession'
 import { useElementSize } from '../hooks/useElementSize'
+import { usePanelOpen } from '../hooks/usePanelOpen'
 import { ChartCanvas } from './ChartCanvas'
 import { ChartCaption } from './ChartCaption'
 import { ControlsPanel } from './ControlsPanel'
@@ -254,6 +257,19 @@ const StyledHeaderExportButton = styled(ToolbarSelect)`
   }
 `
 
+/** Icon-only toolbar button that closes and reopens the controls column. */
+const StyledPanelToggle = styled(StyledHeaderExportButton)`
+  && {
+    flex: none;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    padding: 0;
+  }
+`
+
 const StyledCanvasArea = styled.div`
   display: flex;
   flex-direction: column;
@@ -359,12 +375,15 @@ export function ChartWorkspace({
     useState<InteractionMode>('read')
   const [interactionResetToken, setInteractionResetToken] = useState(0)
   const [tableOpen, setTableOpen] = useState(false)
-  const [controlsHidden, setControlsHidden] = useState(false)
+  // The controls column can be closed so the chart takes the room; the
+  // choice is remembered across reloads.
+  const [controlsOpen, setControlsOpen] = usePanelOpen('purechart.controlsOpen')
+  const controlsHidden = !controlsOpen
   const [panelWidth, setPanelWidth] = useState(() => {
     try { const value = Number(localStorage.getItem('purechart.panelWidth')); return value >= 300 && value <= 640 ? value : 360 }
     catch { return 360 }
   })
-  const showPanel = (next: typeof panel) => { setPanel(next); setControlsHidden(false) }
+  const showPanel = (next: typeof panel) => { setPanel(next); setControlsOpen(true) }
   const [panel, setPanel] = useState<'data' | 'chart' | 'style' | 'review' | 'export'>(session.table.rows.length ? 'chart' : 'data')
 
   const geometry = useMemo(
@@ -443,6 +462,15 @@ export function ChartWorkspace({
     <StyledRoot data-app="chart">
         <StyledHeader>
           <StyledHeaderTitle>
+            <StyledPanelToggle
+              aria-label={controlsHidden ? 'Show controls' : 'Hide controls'}
+              title={controlsHidden ? 'Show controls' : 'Hide controls'}
+              aria-expanded={controlsOpen}
+              aria-controls="purechart-controls"
+              onClick={() => setControlsOpen(open => !open)}
+            >
+              <PlatformIcon icon={controlsHidden ? PanelLeftOpen : PanelLeftClose} size={16} />
+            </StyledPanelToggle>
             <StyledChartTitle
               aria-label={onSheet ? 'Document name' : 'Chart name'}
               value={onSheet ? session.sheet.title : session.spec.title}
@@ -471,7 +499,6 @@ export function ChartWorkspace({
             </StyledChartMeta>
           </StyledHeaderTitle>
           <StyledHeaderActions>
-            <StyledHeaderExportButton aria-expanded={!controlsHidden} onClick={() => setControlsHidden(value => !value)}>{controlsHidden ? 'Show controls' : 'Hide controls'}</StyledHeaderExportButton>
             <StyledHeaderExportButton aria-label="Undo" title="Undo (⌘/Ctrl Z)" disabled={!session.canUndo} onClick={session.undo}>Undo</StyledHeaderExportButton>
             <StyledHeaderExportButton aria-label="Redo" title="Redo (⌘/Ctrl Shift Z)" disabled={!session.canRedo} onClick={session.redo}>Redo</StyledHeaderExportButton>
             {onSheet ? null : (
@@ -485,7 +512,7 @@ export function ChartWorkspace({
           </StyledHeaderActions>
         </StyledHeader>
       <StyledWorkspace data-controls-hidden={controlsHidden} style={{ '--chart-panel-width': `${panel === 'data' ? Math.max(440, panelWidth) : panelWidth}px` } as CSSProperties}>
-      <StyledSidebar hidden={controlsHidden} aria-label="Chart controls">
+      <StyledSidebar id="purechart-controls" hidden={controlsHidden} aria-label="Chart controls">
         <StyledPaneSize>Pane width<input aria-label="Pane width" type="range" min={300} max={640} value={panelWidth} onChange={event => {
           const width = Number(event.target.value); setPanelWidth(width)
           try { localStorage.setItem('purechart.panelWidth', String(width)) } catch { /* Sizing still works without storage. */ }
