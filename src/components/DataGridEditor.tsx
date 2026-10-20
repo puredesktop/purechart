@@ -4,6 +4,7 @@ import { dataGrid, type DataEdit } from '../lib/dataEditing'
 import { SelectField } from './SelectField'
 import type { ColumnTypes, ColumnType, DataTable } from '../lib/dataParse'
 import { enterprise } from '../enterpriseLook'
+import { columnRefs } from '../lib/agentRefs'
 
 const ROW_HEIGHT = 32
 const WINDOW_ROWS = 32
@@ -40,7 +41,7 @@ export function DataGridEditor({ table, sourceText, onEdit, columnTypes = {} }: 
     {!!table.issues?.length && <p role="status">{table.issues.length} invalid {table.issues.length === 1 ? 'value' : 'values'} highlighted. Original text is retained; charts treat these cells as missing.</p>}
     <Scroll onScroll={event => setScrollTop(event.currentTarget.scrollTop)}>
       <table aria-label="Editable source data" aria-rowcount={grid.rows.length + 1}>
-        <thead><tr><th scope="col">Row</th>{grid.columns.map((name, column) => <th key={column} scope="col">
+        <thead><tr><th scope="col">Row</th>{grid.columns.map((name, column) => <th key={column} scope="col" {...columnRefs(name)}>
           <Cell value={name} label={`Column ${column + 1} name`} onCommit={value => onEdit({ kind: 'rename', column, name: value })} />
           <SelectField label={`Type of ${name}`} value={columnTypes[name] ?? 'auto'}
             options={[{ id: 'auto', label: `Auto (${table.columns[column]?.type ?? 'text'})` }, { id: 'string', label: 'Text' }, { id: 'number', label: 'Number' }, { id: 'date', label: 'Date' }]}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { styled } from 'styled-components'
 import type { ChartFinding } from '../lib/chartFindings'
+import { agentRefs } from '../lib/agentRefs'
 
 /**
  * The sentence under the chart, and where it comes from.
@@ -57,6 +58,7 @@ export function ChartCaption({
               {findings.map(finding => (
                 <StyledFinding
                   key={finding.id}
+                  {...agentRefs([finding.id, `captionFindingIds:${finding.id}`], finding.text)}
                   type="button"
                   onClick={() => {
                     onChange(finding.text)

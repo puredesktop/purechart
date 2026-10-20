@@ -22,6 +22,7 @@ import { styled } from 'styled-components'
 import { computeChartGeometry } from '../lib/chartLayout'
 import { facetLayout } from '../lib/chartFacet'
 import { chartFindings } from '../lib/chartFindings'
+import { agentRefs } from '../lib/agentRefs'
 import { reviewChart } from '../lib/chartReview'
 import { openAssistantDrawer } from '../bridge/platformBridge'
 import type { InteractionMode } from '../lib/chartInteraction'
@@ -591,7 +592,18 @@ export function ChartWorkspace({
               return { name: `${session.spec.title || 'chart'}.svg`, alt: session.spec.title || 'Chart', caption: session.spec.chart.caption || undefined, dataUrl: svgAssetDataUrl(serializeSvg(svgRef.current)) }
             }} />}
 
-            <StyledChartStage ref={canvasRef}>
+            <StyledChartStage
+              ref={canvasRef}
+              {...agentRefs(
+                [
+                  session.documentPath,
+                  session.documentPath && `path:${session.documentPath}`,
+                  !onSheet && session.sheet.focusedId,
+                  !onSheet && session.sheet.focusedId && `chart:${session.sheet.focusedId}`,
+                ],
+                session.spec.title || 'Chart',
+              )}
+            >
               {session.table.rows.length === 0 ? (
                 <EmptyState title="Turn your data into a chart" message="Import a file or paste a table in the Data panel, then Apply data." />
               ) : onSheet ? (

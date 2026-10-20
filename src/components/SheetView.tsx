@@ -10,6 +10,7 @@ import { specForChart, type ChartSheet } from '../lib/chartSheet'
 import type { ChartSpec } from '../lib/chartSpec'
 import type { DataTable } from '../lib/dataParse'
 import { enterprise } from '../enterpriseLook'
+import { agentRefs, chartRefs } from '../lib/agentRefs'
 
 /**
  * The sheet: every reading of this table, at once.
@@ -78,7 +79,7 @@ export function SheetView({
     <StyledSheet aria-label="Every chart on this sheet">
       {dragError && <p role="alert">{dragError}</p>}
       {cards.map((card, index) => (
-        <StyledCard key={card.id}>
+        <StyledCard key={card.id} {...chartRefs(card.id, card.spec.title || `Chart ${index + 1}`)}>
           <StyledOpen
             type="button"
             onClick={() => onFocus(card.id)}
@@ -156,6 +157,7 @@ export function SheetView({
               candidates.map((candidate, index) => (
                 <StyledCandidate
                   key={`${candidate.type}-${candidate.facet ?? ''}-${index}`}
+                  {...agentRefs([`form:${index}`], candidate.job)}
                   type="button"
                   disabled={!candidate.supported}
                   onClick={() => {
