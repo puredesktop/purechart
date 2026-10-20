@@ -596,6 +596,7 @@ export function ChartWorkspace({
               ref={canvasRef}
               {...agentRefs(
                 [
+                  '@open',
                   session.documentPath,
                   session.documentPath && `path:${session.documentPath}`,
                   !onSheet && session.sheet.focusedId,
