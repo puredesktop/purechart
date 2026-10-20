@@ -5,6 +5,7 @@ import { applyForm, suggestForms, type FormCandidate } from '../lib/chartForms'
 import type { ChartSpec } from '../lib/chartSpec'
 import type { DataTable } from '../lib/dataParse'
 import { enterprise } from '../enterpriseLook'
+import { agentRefs } from '../lib/agentRefs'
 
 /**
  * The forms this table can show, drawn from this table.
@@ -64,6 +65,7 @@ export function FormsRail({
       {candidates.map((candidate, index) => (
         <StyledCard
           key={`${candidate.type}-${candidate.facet ?? ''}-${index}`}
+          {...agentRefs([`form:${index}`], candidate.job)}
           type="button"
           $chosen={chosen(candidate)}
           $supported={candidate.supported}

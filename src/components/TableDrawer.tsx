@@ -1,5 +1,6 @@
 import { DataGridEditor } from './DataGridEditor'
 import type { DataEdit } from '../lib/dataEditing'
+import { columnRefs } from '../lib/agentRefs'
 import { styled } from 'styled-components'
 import type { ColumnTypes, DataTable } from '../lib/dataParse'
 
@@ -58,6 +59,7 @@ export function TableDrawer({
                 {table.columns.map(column => (
                   <StyledHeaderCell
                     key={column.name}
+                    {...columnRefs(column.name)}
                     scope="col"
                     $numeric={column.type === 'number'}
                   >

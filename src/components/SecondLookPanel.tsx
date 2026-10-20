@@ -6,6 +6,7 @@ import {
 } from '../lib/chartReview'
 import type { ChartSpec } from '../lib/chartSpec'
 import { enterprise } from '../enterpriseLook'
+import { agentRefs } from '../lib/agentRefs'
 
 /**
  * Second look, on screen.
@@ -57,7 +58,7 @@ export function SecondLookPanel({
       </StyledHeading>
 
       {review.findings.map(finding => (
-        <StyledFinding key={finding.id} $severity={finding.severity}>
+        <StyledFinding key={finding.id} $severity={finding.severity} {...agentRefs([finding.id, `finding:${finding.id}`], finding.title)}>
           <StyledTag $severity={finding.severity}>
             {finding.severity === 'blocking'
               ? "Won't read"
