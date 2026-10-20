@@ -2,7 +2,7 @@ import { formatAgentToolJson } from '@purescience/platform-ui/bridge/agentToolHe
 import type { AgentToolHandlerResult } from '@purescience/platform-ui/bridge/react/usePlatformAgentTools'
 import {
   clearChartAgentAnnotationsSpec,
-  getChartAgentContext,
+  getChartAgentChangeSummary,
 } from '../../../lib/agentChartTools'
 import type { ChartAgentToolContext } from '../../context'
 
@@ -16,7 +16,7 @@ export async function clearChartAnnotationsHandler(
   })
   return {
     content: formatAgentToolJson(
-      getChartAgentContext({
+      getChartAgentChangeSummary({
         spec,
         table: context.table,
         documentPath: context.documentPath,

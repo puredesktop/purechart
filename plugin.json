@@ -183,7 +183,7 @@
         },
         {
           "name": "setChartTitle",
-          "description": "Set the current chart title.",
+          "description": "Set the current chart title. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -199,7 +199,7 @@
         },
         {
           "name": "setChartType",
-          "description": "Set the current chart type.",
+          "description": "Set the current chart type. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -227,7 +227,7 @@
         },
         {
           "name": "setChartEncodings",
-          "description": "Set the x axis column, y measure columns, and/or the series grouping column. Any field left out is unchanged; pass null for x or series to clear it, and [] for y to clear the measures. Column names must exist in getChartData.",
+          "description": "Set the x axis column, y measure columns, and/or the series grouping column. Any field left out is unchanged; pass null for x or series to clear it, and [] for y to clear the measures. Column names must exist in getChartData. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -252,7 +252,7 @@
         },
         {
           "name": "setChartPalette",
-          "description": "Set the current chart color palette, or create and select a custom palette from hex colors.",
+          "description": "Set the current chart color palette, or create and select a custom palette from hex colors. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -277,7 +277,7 @@
         },
         {
           "name": "setChartStyle",
-          "description": "Set style options: rangeFrame (axes span only the data), grid (faint gridlines), directLabels (series labelled at line end), rug (marginal ticks at each point), strokeWidth (>0), pointRadius (>=0). Fields left out are unchanged.",
+          "description": "Set style options: rangeFrame (axes span only the data), grid (faint gridlines), directLabels (series labelled at line end), rug (marginal ticks at each point), strokeWidth (>0), pointRadius (>=0). Fields left out are unchanged. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -305,7 +305,7 @@
         },
         {
           "name": "updateChart",
-          "description": "Update several chart properties at once: title, type, encodings (x, y, series) and style. Fields left out are unchanged — sending only type never touches the encodings. For a single change prefer the focused set* tools.",
+          "description": "Update several chart properties at once: title, type, encodings (x, y, series) and style. Fields left out are unchanged — sending only type never touches the encodings. For a single change prefer the focused set* tools. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -535,7 +535,7 @@
         {
           "name": "facetChart",
           "risk": "write",
-          "description": "Split the chart into one panel per value of a column, all on one shared y scale. This is the honest answer to more series than the palette can keep apart, and it gets clearer as the categories multiply. Pass no column to go back to one chart. Refuses a column with fewer than two values.",
+          "description": "Split the chart into one panel per value of a column, all on one shared y scale. This is the honest answer to more series than the palette can keep apart, and it gets clearer as the categories multiply. Pass no column to go back to one chart. Refuses a column with fewer than two values. Replies with the panel count and the first 24 facet values (valuesTruncated and moreValues say how many were left out).",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -691,7 +691,7 @@
         },
         {
           "name": "addChartAnnotation",
-          "description": "Append a saved annotation to the chart. A point annotation calls out one data point: { text, target: { kind: 'point', seriesKey, xLabel, value } } where seriesKey is the y column name (or the series value when a series column is set), xLabel is the x value as text exactly as getChartData shows it, and value is the y value. A range annotation shades a span: { text, target: { kind: 'range', x: { from, to }, y: { from, to }, summary: { count, min, max, average, change } } } with x.from/x.to as x labels and y in data units — read getChartData to compute the summary yourself. Both forms are stored as data, so they land on the same points at any size.",
+          "description": "Append a saved annotation to the chart. A point annotation calls out one data point: { text, target: { kind: 'point', seriesKey, xLabel, value } } where seriesKey is the y column name (or the series value when a series column is set), xLabel is the x value as text exactly as getChartData shows it, and value is the y value. A range annotation shades a span: { text, target: { kind: 'range', x: { from, to }, y: { from, to }, summary: { count, min, max, average, change } } } with x.from/x.to as x labels and y in data units — read getChartData to compute the summary yourself. Both forms are stored as data, so they land on the same points at any size. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -805,7 +805,7 @@
         {
           "name": "clearChartAnnotations",
           "risk": "destructive",
-          "description": "Remove all annotations from the current chart.",
+          "description": "Remove all annotations from the current chart. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
           "inputSchema": {
             "type": "object",
             "properties": {}

@@ -146,6 +146,11 @@ explicit direction.
 - Partial edits are safe: `updateChart` and the `set*` tools leave every
   field you do not send unchanged. Clear an encoding deliberately with
   `null` (`x`, `series`) or `[]` (`y`), never by omitting it.
+- Edits reply with a compact summary of the chart after the change —
+  title, type, encodings, style, annotation count, row and column
+  counts — not the column list or custom palette colours. Call
+  `getChartContext` for those. `facetChart` names the first 24 facet
+  values and counts the rest.
 - `addChartAnnotation` targets one data point: `seriesKey` is the y
   column (or the series value when a series column is set), `xLabel` is
   the x value as text exactly as `getChartData` shows it, `value` the

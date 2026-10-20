@@ -212,6 +212,34 @@ export function getChartAgentContext(input: {
   }
 }
 
+/**
+ * What a spec edit replies with. The same fields as getChartContext except
+ * the ones that grow with the document: the column list (wide tables run to
+ * hundreds of columns) and the custom palettes' colours. Counts stand in for
+ * them; getChartContext / getChartData return the full lists.
+ */
+export interface ChartAgentChangeSummary
+  extends Omit<ChartAgentContextSnapshot, 'style' | 'data'> {
+  style: Omit<ChartStyle, 'customPalettes'> & { customPaletteCount: number }
+  data: Omit<ChartAgentDataSummary, 'columns'>
+}
+
+export function getChartAgentChangeSummary(input: {
+  spec: ChartSpec
+  table: DataTable
+  documentPath: string | null
+  status: string
+}): ChartAgentChangeSummary {
+  const { style, data, ...rest } = getChartAgentContext(input)
+  const { customPalettes, ...styleRest } = style
+  const { columns: _columns, ...dataRest } = data
+  return {
+    ...rest,
+    style: { ...styleRest, customPaletteCount: customPalettes.length },
+    data: dataRest,
+  }
+}
+
 export function getChartAgentData(
   spec: ChartSpec,
   table: DataTable,

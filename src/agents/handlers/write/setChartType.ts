@@ -4,7 +4,7 @@ import type {
   AgentToolInvokeContext,
 } from '@purescience/platform-ui/bridge/react/usePlatformAgentTools'
 import {
-  getChartAgentContext,
+  getChartAgentChangeSummary,
   updateChartAgentSpec,
 } from '../../../lib/agentChartTools'
 import type { ChartType } from '../../../lib/chartSpec'
@@ -26,7 +26,7 @@ export async function setChartTypeHandler(
   })
   return {
     content: formatAgentToolJson(
-      getChartAgentContext({
+      getChartAgentChangeSummary({
         spec,
         table: context.table,
         documentPath: context.documentPath,
