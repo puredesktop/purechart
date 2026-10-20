@@ -9,6 +9,9 @@ import { facetCandidates } from '../../../lib/chartReview'
 import { readAgentToolStringArg, readNumberArg } from '../args'
 import type { ChartAgentToolContext } from '../../context'
 
+/** How many facet values the reply names; `panels` is always the full count. */
+export const FACET_VALUES_LISTED = 24
+
 /** One panel per value of a column, on one shared scale. */
 export async function facetChartHandler(
   context: ChartAgentToolContext,
@@ -61,11 +64,17 @@ export async function facetChartHandler(
     table: context.table,
     status: `One panel per ${column}`,
   })
+  // The column can have thousands of distinct values; name the first few and
+  // count the rest rather than echo the whole column back.
+  const listed = values.slice(0, FACET_VALUES_LISTED)
   return {
     content: formatAgentToolJson({
       facet: column,
       panels: values.length,
-      values,
+      values: listed,
+      ...(values.length > listed.length
+        ? { valuesTruncated: true, moreValues: values.length - listed.length }
+        : {}),
       note: 'Every panel shares one y scale, so the panels can be compared.',
     }),
   }

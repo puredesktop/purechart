@@ -8,7 +8,7 @@ import type {
 } from '@purescience/platform-ui/bridge/react/usePlatformAgentTools'
 import {
   addChartAgentAnnotationSpec,
-  getChartAgentContext,
+  getChartAgentChangeSummary,
 } from '../../../lib/agentChartTools'
 import type { ChartAnnotation } from '../../../lib/chartSpec'
 import type { ChartAgentToolContext } from '../../context'
@@ -40,7 +40,7 @@ export async function addChartAnnotationHandler(
   })
   return {
     content: formatAgentToolJson(
-      getChartAgentContext({
+      getChartAgentChangeSummary({
         spec,
         table: context.table,
         documentPath: context.documentPath,
