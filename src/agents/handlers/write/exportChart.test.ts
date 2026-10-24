@@ -3,12 +3,33 @@ import type { ChartAgentToolContext } from '../../context'
 import type { AgentToolInvokeContext } from '@purescience/platform-ui/bridge/react/usePlatformAgentTools'
 import { createChartAgentSpec } from '../../../lib/agentChartTools'
 import { exportChartHandler } from './exportChart'
+import { parseTable } from '../../../lib/dataParse'
 
 function context() {
   const { spec, table } = createChartAgentSpec({ dataText: 'x,y\n1,10\n2,20', type: 'scatter' })
   return { spec, table, documentPath: null, getChartSvg: vi.fn(() => null), saveDocument: vi.fn(async () => '/tmp/test.chart'), exportSvg: vi.fn(), exportPng: vi.fn() } as unknown as ChartAgentToolContext
 }
 const invocation = (args: Record<string, unknown>) => ({ arguments: args }) as AgentToolInvokeContext
+
+it('exports surviving log panels and returns a warning naming the excluded panel', async () => {
+  const ctx = context()
+  ctx.table = parseTable('x,y,panel\n1,10,Good\n2,100,Good\n1,0,Bad')
+  ctx.spec.chart.facet.column = 'panel'
+  ctx.spec.chart.axes.y.scale = 'log'
+  vi.mocked(ctx.exportSvg).mockResolvedValue({ kind: 'file', path: '/tmp/test.svg', linked: false })
+  const result = await exportChartHandler(ctx, invocation({}))
+  expect(ctx.exportSvg).toHaveBeenCalled()
+  expect(JSON.parse(result.content)).toMatchObject({ exported: '/tmp/test.svg', linked: false, warnings: [expect.stringContaining('Panel “Bad” excluded')] })
+})
+
+it('names fully excluded panels without advising the user to add data', async () => {
+  const ctx = context()
+  ctx.table = parseTable('x,y,panel\n1,0,Bad\n2,-1,Also bad')
+  ctx.spec.chart.facet.column = 'panel'
+  ctx.spec.chart.axes.y.scale = 'log'
+  await expect(exportChartHandler(ctx, invocation({}))).rejects.toThrow('Panel “Bad” excluded')
+  expect(ctx.saveDocument).not.toHaveBeenCalled()
+})
 
 it.each([
   { width: NaN }, { height: Infinity }, { width: '900' },

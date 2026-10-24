@@ -24,6 +24,8 @@ import type { DataTable } from './dataParse'
  */
 
 export interface RenderChartOptions {
+  /** In-place redraws must preserve the existing asset when any panel is lost. */
+  allowPartialPanels?: boolean
   width?: number
   height?: number
   /** Painted behind the chart. `null` leaves it transparent. */
@@ -83,8 +85,10 @@ export interface RenderedChart {
   svg: string
   width: number
   height: number
-  /** Null when there is nothing to draw, with the reason in `message`. */
+  /** Blocking reason, or null when the figure can be used. */
   message: string | null
+  /** Non-blocking omissions, named so callers can report the affected panels. */
+  warnings: string[]
 }
 
 /**
@@ -102,7 +106,7 @@ export function renderChartSvg(
   const width = options.width ?? DEFAULT_RENDER_SIZE.width
   const height = options.height ?? DEFAULT_RENDER_SIZE.height
   const sizeError = validateChartExportSize(width, height)
-  if (sizeError) return { svg: '', width, height, message: sizeError }
+  if (sizeError) return { svg: '', width, height, message: sizeError, warnings: [] }
   const dims: ChartDims = { width: Math.round(width), height: Math.round(height) }
   const bare = options.bare ?? false
   const captionLines: string[] = []
@@ -124,6 +128,13 @@ export function renderChartSvg(
   const drawingDims = { ...dims, height: Math.max(90, dims.height - captionHeight) }
   const facets = facetLayout(table, spec, drawingDims, { compact: bare })
   const geometry = computeChartGeometry(table, spec, drawingDims, { compact: bare })
+  const warnings = facets?.panels.filter(panel => panel.geometry.empty).map(panel =>
+    `Panel “${panel.value}” excluded: ${panel.geometry.message ?? 'No values to plot.'}`,
+  ) ?? []
+  const facetError = facets?.message ?? (facets && !facets.panels.some(panel => !panel.geometry.empty)
+    ? warnings.join(' ') || 'No panels to plot.'
+    : facets?.panels.some(panel => panel.geometry.empty && (options.allowPartialPanels === false || panel.geometry.refusalReason !== 'log-y-non-positive'))
+      ? warnings.join(' ') : null)
 
   const body = stripTransient(
     renderToStaticMarkup(
@@ -171,6 +182,7 @@ export function renderChartSvg(
     svg: `<?xml version="1.0" encoding="UTF-8"?>\n${completed}\n`,
     width: dims.width,
     height: dims.height,
-    message: captionHeight > dims.height - 120 ? 'Increase export height to fit the full caption.' : facets ? facets.message ?? facets.panels.find(panel => panel.geometry.empty)?.geometry.message ?? null : geometry.empty ? geometry.message : null,
+    message: captionHeight > dims.height - 120 ? 'Increase export height to fit the full caption.' : facets ? facetError : geometry.empty ? geometry.message : null,
+    warnings,
   }
 }
