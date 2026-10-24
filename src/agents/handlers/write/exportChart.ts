@@ -83,9 +83,8 @@ export async function exportChartHandler(
       documentPath: basePath,
       placedIn: destination ?? null,
       palette,
-      // The figure remembers this chart; when the data moves, rerenderFigures
-      // (or the person, from Export) redraws it in place.
-      linked: true,
+      // Only a saved figure record lets Export redraw the file in place.
+      linked: result.linked,
       warnings: drawn.warnings,
     }),
   }

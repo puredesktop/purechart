@@ -83,7 +83,7 @@ interface UseChartSessionArgs {
 
 /** Where an export landed: a file beside the document, or a browser download. */
 export type ChartExportResult =
-  | { kind: 'file'; path: string }
+  | { kind: 'file'; path: string; linked: boolean }
   | { kind: 'download'; fileName: string }
 
 export interface ChartExportOptions {
@@ -968,7 +968,7 @@ export function useChartSession({
     format: 'svg' | 'png',
     drawn: { width: number; height: number },
     options?: ChartExportOptions,
-  ) => {
+  ): Promise<boolean> => {
     const chartPath = documentPathRef.current
     const sheet = liveSheetRef.current
     const chartId = options?.chartId ?? sheet.focusedId ?? sheet.charts[0]?.id ?? null
@@ -1001,7 +1001,9 @@ export function useChartSession({
       await writeTextFile(`${chartPath}/${FIGURES_FILE}`, serializeFigures(next))
       figuresRef.current = next
       setFigures(next)
+      return true
     }
+    return false
   }
 
   const exportSvg = useCallback(
@@ -1048,13 +1050,13 @@ export function useChartSession({
       const output = outputFor(base, snapshot.title, 'svg', options)
       try {
         await writeBinaryFile(output.absolutePath, toUtf8Bytes(svgString))
-        await registerFigure(output, base, snapshot.title, 'svg', drawn, options)
+        const linked = await registerFigure(output, base, snapshot.title, 'svg', drawn, options)
         setStatus(
           options?.relativePath
             ? `Redrew ${fileNameFromPath(output.absolutePath)}`
             : `Exported ${fileNameFromPath(output.absolutePath)} + copied embed`,
         )
-        return { kind: 'file', path: output.absolutePath }
+        return { kind: 'file', path: output.absolutePath, linked }
       } catch (exportError) {
         setError(
           exportError instanceof Error
@@ -1106,9 +1108,9 @@ export function useChartSession({
         }
         const output = outputFor(base, snapshot.title, 'png', options)
         await writeBinaryFile(output.absolutePath, pngBytes)
-        await registerFigure(output, base, snapshot.title, 'png', drawn, options)
+        const linked = await registerFigure(output, base, snapshot.title, 'png', drawn, options)
         setStatus(options?.relativePath ? `Redrew ${fileNameFromPath(output.absolutePath)}` : `Exported ${fileNameFromPath(output.absolutePath)}`)
-        return { kind: 'file', path: output.absolutePath }
+        return { kind: 'file', path: output.absolutePath, linked }
       } catch (exportError) {
         setError(
           exportError instanceof Error

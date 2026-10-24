@@ -16,10 +16,10 @@ it('exports surviving log panels and returns a warning naming the excluded panel
   ctx.table = parseTable('x,y,panel\n1,10,Good\n2,100,Good\n1,0,Bad')
   ctx.spec.chart.facet.column = 'panel'
   ctx.spec.chart.axes.y.scale = 'log'
-  vi.mocked(ctx.exportSvg).mockResolvedValue({ kind: 'file', path: '/tmp/test.svg' })
+  vi.mocked(ctx.exportSvg).mockResolvedValue({ kind: 'file', path: '/tmp/test.svg', linked: false })
   const result = await exportChartHandler(ctx, invocation({}))
   expect(ctx.exportSvg).toHaveBeenCalled()
-  expect(JSON.parse(result.content)).toMatchObject({ exported: '/tmp/test.svg', warnings: [expect.stringContaining('Panel “Bad” excluded')] })
+  expect(JSON.parse(result.content)).toMatchObject({ exported: '/tmp/test.svg', linked: false, warnings: [expect.stringContaining('Panel “Bad” excluded')] })
 })
 
 it('names fully excluded panels without advising the user to add data', async () => {
@@ -54,16 +54,26 @@ it('reports a failed file export instead of returning a success path', async () 
 })
 it('exports at the requested dimensions and reports the actual file', async () => {
   const ctx = context()
-  vi.mocked(ctx.exportPng).mockResolvedValue({ kind: 'file', path: '/tmp/test.chart/assets/figures/test.png' })
+  vi.mocked(ctx.exportPng).mockResolvedValue({ kind: 'file', path: '/tmp/test.chart/assets/figures/test.png', linked: true })
   const result = await exportChartHandler(ctx, invocation({ format: 'png', width: 1600, height: 900, scale: 2 }))
   expect(ctx.exportPng).toHaveBeenCalledWith(null, expect.objectContaining({ width: 1600, height: 900, scale: 2, basePath: '/tmp/test.chart' }))
   expect(JSON.stringify(result)).toContain('test.chart/assets/figures/test.png')
 })
 it('draws in one ink when asked, and refuses a palette it does not have', async () => {
   const ctx = context()
-  vi.mocked(ctx.exportSvg).mockResolvedValue({ kind: 'file', path: '/tmp/test.chart/assets/figures/test.svg' })
+  vi.mocked(ctx.exportSvg).mockResolvedValue({ kind: 'file', path: '/tmp/test.chart/assets/figures/test.svg', linked: true })
   const result = await exportChartHandler(ctx, invocation({ palette: 'monochrome' }))
   expect(ctx.exportSvg).toHaveBeenCalledWith(null, expect.objectContaining({ palette: 'monochrome' }))
   expect(result.content).toContain('"linked": true')
   await expect(exportChartHandler(context(), invocation({ palette: 'sepia' }))).rejects.toThrow('palette')
+})
+
+it.each(['svg', 'png'] as const)('reports whether the %s export saved a redraw record', async format => {
+  const ctx = context()
+  const exporter = format === 'png' ? ctx.exportPng : ctx.exportSvg
+  for (const linked of [false, true]) {
+    vi.mocked(exporter).mockResolvedValue({ kind: 'file', path: `/tmp/test.${format}`, linked })
+    const result = await exportChartHandler(ctx, invocation({ format }))
+    expect(JSON.parse(result.content)).toMatchObject({ exported: `/tmp/test.${format}`, linked })
+  }
 })
