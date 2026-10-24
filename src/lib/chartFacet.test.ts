@@ -96,13 +96,14 @@ describe('logarithmic facet domains', () => {
     const invalid = layout.panels.find(panel => panel.value === 'Invalid')!
     expect(invalid.geometry.empty).toBe(true)
     expect(invalid.geometry.message).toContain('Log Y requires positive values')
-    const { svg, message } = renderChartSvg(source, chart, { width: 900, height: 480 })
+    const { svg, message, warnings } = renderChartSvg(source, chart, { width: 900, height: 480 })
     const document = new DOMParser().parseFromString(svg, 'image/svg+xml')
     const invalidPanel = [...document.querySelectorAll('svg > svg')].find(panel => panel.textContent?.includes('Invalid'))!
     expect(invalidPanel.textContent).toContain('Panel excluded.')
     expect(invalidPanel.textContent).toContain('Log Y requires positive values')
     expect(invalidPanel.querySelector('path')).toBeNull()
-    expect(message).toContain('Log Y requires positive values')
+    expect(message).toBeNull()
+    expect(warnings).toEqual(['Panel “Invalid” excluded: Log Y requires positive values and a line or scatter chart.'])
   })
 
   it('keeps the refusal when every panel is invalid', () => {

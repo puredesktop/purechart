@@ -3,6 +3,7 @@ import { renderChartSvg } from './chartRender'
 import { CHART_TRANSIENT_ATTR } from './chartExport'
 import { defaultSpec, type ChartSpec } from './chartSpec'
 import { parseTable } from './dataParse'
+import { chartSnapshotHtml } from './chartSnapshot'
 
 const csv = [
   'month,region,nominations',
@@ -99,6 +100,33 @@ describe('an axis someone named', () => {
 })
 
 describe('a chart split into panels', () => {
+  it('allows partial figures, previews and thumbnails with named exclusion warnings', () => {
+    const faceted = spec()
+    faceted.chart.facet.column = 'region'
+    faceted.chart.axes.y.scale = 'log'
+    const text = csv.replace('Pacific,4', 'Pacific,0')
+    faceted.data.inline = { format: 'csv', text }
+    for (const bare of [false, true]) {
+      const rendered = renderChartSvg(parseTable(text), faceted, { bare })
+      expect(rendered.message).toBeNull()
+      expect(rendered.warnings).toEqual(['Panel “Pacific” excluded: Log Y requires positive values and a line or scatter chart.'])
+      expect(rendered.svg).toContain('Panel excluded.')
+      expect(rendered.svg).toContain('<path')
+    }
+    expect(chartSnapshotHtml(faceted)).toContain('Panel excluded.')
+  })
+
+  it('blocks an entirely excluded figure with every affected panel named', () => {
+    const faceted = spec()
+    faceted.chart.facet.column = 'region'
+    faceted.chart.axes.y.scale = 'log'
+    const text = csv.replace('Pacific,4', 'Pacific,0').replace('Aotearoa,18', 'Aotearoa,-1')
+    const rendered = renderChartSvg(parseTable(text), faceted)
+    expect(rendered.message).toContain('Panel “Pacific” excluded')
+    expect(rendered.message).toContain('Panel “Aotearoa” excluded')
+    expect(rendered.warnings).toHaveLength(2)
+  })
+
   it('draws every panel in one figure', () => {
     const faceted = spec()
     faceted.chart.facet = { column: 'region', columns: 0 }

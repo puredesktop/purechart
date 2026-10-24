@@ -38,7 +38,7 @@ export async function exportChartHandler(
   const drawn = renderChartSvg(context.table, context.spec, { width, height })
   if (drawn.message) {
     throw new AgentChartToolError(
-      `nothing to export: ${drawn.message} Give the chart data (createChart or replaceChartData) and x/y encodings first — getChartContext shows what is missing.`,
+      `Cannot export: ${drawn.message} Check getChartContext and resolve the reported issue before retrying.`,
     )
   }
   const sizeError = validateChartExportSize(drawn.width, drawn.height, format === 'png' ? readNumberArg(args, 'scale') : 1)
@@ -86,6 +86,7 @@ export async function exportChartHandler(
       // The figure remembers this chart; when the data moves, rerenderFigures
       // (or the person, from Export) redraws it in place.
       linked: true,
+      warnings: drawn.warnings,
     }),
   }
 }
