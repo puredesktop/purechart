@@ -117,23 +117,26 @@ function asNumber(value: CellValue): number | null {
  * one reading at 09:30 means every reading is a moment, not a day, and
  * cutting them all to the day would collapse a day's readings into one band.
  */
-export type DateDetail = 'day' | 'minute' | 'second'
+export type DateDetail = 'day' | 'minute' | 'second' | 'millisecond'
 
 export function dateDetailOf(values: CellValue[]): DateDetail {
   let detail: DateDetail = 'day'
   for (const value of values) {
     if (!(value instanceof Date)) continue
-    if (value.getUTCSeconds() || value.getUTCMilliseconds()) return 'second'
-    if (value.getUTCHours() || value.getUTCMinutes()) detail = 'minute'
+    if (value.getUTCMilliseconds()) return 'millisecond'
+    if (value.getUTCSeconds()) detail = 'second'
+    else if (detail === 'day' && (value.getUTCHours() || value.getUTCMinutes())) detail = 'minute'
   }
   return detail
 }
 
-/** `2024-03-01`, or `2024-03-01 09:30` / `2024-03-01 09:30:15` when times matter. */
+const TIME_END: Record<Exclude<DateDetail, 'day'>, number> = { minute: 16, second: 19, millisecond: 23 }
+
+/** `2024-03-01`, or `2024-03-01 09:30`, `…09:30:15`, `…09:30:15.250` when times matter. */
 export function dateCategoryLabel(value: Date, detail: DateDetail = 'day'): string {
   const iso = value.toISOString()
   if (detail === 'day') return iso.slice(0, 10)
-  return `${iso.slice(0, 10)} ${iso.slice(11, detail === 'minute' ? 16 : 19)}`
+  return `${iso.slice(0, 10)} ${iso.slice(11, TIME_END[detail])}`
 }
 
 function asCategory(value: CellValue, detail: DateDetail = 'day'): string | null {
@@ -147,12 +150,16 @@ function xKey(value: CellValue): string {
   return value instanceof Date ? String(value.getTime()) : value === null ? '—' : String(value)
 }
 
-/** Ticks within one day show the time; ticks a day apart show the day. */
+/**
+ * Ticks show as much time as their spacing needs — seconds for ticks seconds
+ * apart, milliseconds below that — and drop the day when they share one.
+ */
 function intradayTickLabel(tick: Date, ticks: Date[]): string {
+  const detail = dateDetailOf(ticks)
+  if (detail === 'day') return utcFormat('%Y-%m-%d')(tick)
+  const time = detail === 'minute' ? '%H:%M' : detail === 'second' ? '%H:%M:%S' : '%H:%M:%S.%L'
   const day = (d: Date) => d.toISOString().slice(0, 10)
-  if (ticks.every(t => day(t) === day(tick))) return utcFormat('%H:%M')(tick)
-  if (ticks.every(t => t.getTime() % 86_400_000 === 0)) return utcFormat('%Y-%m-%d')(tick)
-  return utcFormat('%Y-%m-%d %H:%M')(tick)
+  return utcFormat(ticks.every(t => day(t) === day(tick)) ? time : `%Y-%m-%d ${time}`)(tick)
 }
 
 function emptyGeometry(dims: ChartDims, message: string): ChartGeometry {

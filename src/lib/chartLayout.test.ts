@@ -272,6 +272,47 @@ describe('computeChartGeometry', () => {
     expect(line.xPixelForLabel(point.xLabel)).toBeCloseTo(point.cx, 6)
   })
 
+  it('labels ticks seconds apart with their seconds', () => {
+    const seconds: DataTable = {
+      columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
+      rows: [
+        { at: new Date('2024-03-01T09:00:00Z'), v: 1 },
+        { at: new Date('2024-03-01T09:00:30Z'), v: 2 },
+      ],
+    }
+    const line = computeChartGeometry(seconds, specWith({ type: 'line', encodings: { x: 'at', y: ['v'], series: null } }), dims)
+    const labels = line.xTicks.map(t => t.label)
+    expect(labels.length).toBeGreaterThan(1)
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(labels).toContain('09:00:30')
+  })
+
+  it('keeps millisecond timestamps apart in bands, stacks and label lookup', () => {
+    const millis: DataTable = {
+      columns: [{ name: 'at', type: 'date' }, { name: 'a', type: 'number' }, { name: 'b', type: 'number' }],
+      rows: [
+        { at: new Date('2024-03-01T09:00:00.100Z'), a: 4, b: 1 },
+        { at: new Date('2024-03-01T09:00:00.900Z'), a: 1, b: 4 },
+      ],
+    }
+    const bar = computeChartGeometry(millis, specWith({ type: 'bar', encodings: { x: 'at', y: ['a'], series: null } }), dims)
+    expect(bar.xTicks.map(t => t.label)).toEqual(['2024-03-01 09:00:00.100', '2024-03-01 09:00:00.900'])
+    expect(new Set(bar.series[0]!.bars.map(b => b.x)).size).toBe(2)
+
+    const stacked = computeChartGeometry(millis, specWith({ type: 'stacked-bar', encodings: { x: 'at', y: ['a', 'b'], series: null } }), dims)
+    for (const bars of stacked.series.map(s => s.bars)) {
+      for (const b of bars) expect(b.y).toBeGreaterThanOrEqual(stacked.plot.top - 0.5)
+    }
+    expect(stacked.series[1]!.bars[0]!.x).toBe(stacked.series[0]!.bars[0]!.x)
+
+    const line = computeChartGeometry(millis, specWith({ type: 'line', encodings: { x: 'at', y: ['a'], series: null } }), dims)
+    const second = line.series[0]!.points[1]!
+    expect(second.xLabel).toBe('2024-03-01 09:00:00.900')
+    expect(line.xPixelForLabel(second.xLabel)).toBeCloseTo(second.cx, 6)
+    const labels = line.xTicks.map(t => t.label)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
   it('keeps day labels for dates that carry no time', () => {
     const daily: DataTable = {
       columns: [{ name: 'day', type: 'date' }, { name: 'v', type: 'number' }],
