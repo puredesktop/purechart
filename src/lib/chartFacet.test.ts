@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { facetColumns, facetLayout, facetValues } from './chartFacet'
 import { defaultSpec, type ChartSpec } from './chartSpec'
 import { parseTable } from './dataParse'
+import { renderChartSvg } from './chartRender'
 
 const entries = [
   'month,category,entries',
@@ -75,6 +76,60 @@ describe('when a facet would say nothing', () => {
 
   it('declines when no column is chosen', () => {
     expect(facetLayout(table, spec(null), { width: 900, height: 480 })).toBeNull()
+  })
+})
+
+describe('logarithmic facet domains', () => {
+  it.each([0, -5])('keeps valid panels visible when another panel contains %s', value => {
+    const source = parseTable(`month,category,entries\nJan,Valid,10\nFeb,Valid,100\nJan,Invalid,${value}\nFeb,Invalid,20\nJan,Other,1\nFeb,Other,50`)
+    const chart = spec('category')
+    chart.chart.axes.y.scale = 'log'
+    const layout = facetLayout(source, chart, { width: 900, height: 480 })!
+
+    expect(layout.yDomain).toEqual([1, 100])
+    const valid = layout.panels.filter(panel => panel.value !== 'Invalid')
+    for (const panel of valid) {
+      expect(panel.geometry.empty).toBe(false)
+      expect(panel.geometry.series[0].points).toHaveLength(2)
+    }
+    expect(valid[0].geometry.yPixelForValue(10)).toBe(valid[1].geometry.yPixelForValue(10))
+    const invalid = layout.panels.find(panel => panel.value === 'Invalid')!
+    expect(invalid.geometry.empty).toBe(true)
+    expect(invalid.geometry.message).toContain('Log Y requires positive values')
+    const { svg, message } = renderChartSvg(source, chart, { width: 900, height: 480 })
+    const document = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    const invalidPanel = [...document.querySelectorAll('svg > svg')].find(panel => panel.textContent?.includes('Invalid'))!
+    expect(invalidPanel.textContent).toContain('Panel excluded.')
+    expect(invalidPanel.textContent).toContain('Log Y requires positive values')
+    expect(invalidPanel.querySelector('path')).toBeNull()
+    expect(message).toContain('Log Y requires positive values')
+  })
+
+  it('keeps the refusal when every panel is invalid', () => {
+    const source = parseTable('month,category,entries\nJan,A,0\nJan,B,-5')
+    const chart = spec('category')
+    chart.chart.axes.y.scale = 'log'
+    const layout = facetLayout(source, chart, { width: 900, height: 480 })!
+    expect(layout.yDomain.every(Number.isFinite)).toBe(true)
+    for (const panel of layout.panels) {
+      expect(panel.geometry.empty).toBe(true)
+      expect(panel.geometry.message).toContain('Log Y requires positive values')
+    }
+  })
+
+  it('fits exclusion notices in narrow panels and keeps thumbnail notices compact', () => {
+    const source = parseTable('month,category,entries\nJan,A,0\nJan,B,10')
+    const chart = spec('category')
+    chart.chart.axes.y.scale = 'log'
+    for (const bare of [false, true]) {
+      const { svg } = renderChartSvg(source, chart, { width: 350, height: 480, bare })
+      const document = new DOMParser().parseFromString(svg, 'image/svg+xml')
+      const panel = [...document.querySelectorAll('svg > svg')].find(panel => panel.textContent?.includes('Panel excluded.'))!
+      const lines = [...panel.querySelectorAll('tspan')]
+      if (bare) expect(lines).toHaveLength(1)
+      else expect(lines.length).toBeGreaterThan(1)
+      for (const line of lines) expect(line.textContent!.length * 6.6).toBeLessThanOrEqual(Number(panel.getAttribute('width')) - 24)
+    }
   })
 })
 

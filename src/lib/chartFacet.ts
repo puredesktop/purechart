@@ -149,11 +149,13 @@ export function facetLayout(
   }))
   const extents = subsets.map(
     entry => computeChartGeometry(entry.table, panelSpec, panelDims, sharedOptions).yExtent,
-  )
-  const yDomain: [number, number] = [
+  ).filter(extent => spec.chart.axes.y.scale !== 'log' || extent[0] > 0)
+  // Rejected log panels return [0, 0], not a usable scale extent. Keep their
+  // refusal local rather than letting that placeholder invalidate every panel.
+  const yDomain: [number, number] = extents.length ? [
     Math.min(...extents.map(extent => extent[0])),
     Math.max(...extents.map(extent => extent[1])),
-  ]
+  ] : [1, 10]
 
   const measured = subsets.map(entry => {
     const geometry = computeChartGeometry(entry.table, panelSpec, panelDims, { ...sharedOptions, yDomain })

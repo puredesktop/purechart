@@ -85,6 +85,14 @@ export const FacetCanvas = forwardRef<SVGSVGElement, FacetCanvasProps>(
             </text>
 
             <g transform={`translate(0, ${FACET_PANEL_TITLE_HEIGHT})`}>
+              {panel.geometry.empty ? (
+                <text x={12} y={24} fontFamily={CHART_FONT_FAMILY} fontSize={11} fill={CHART_MUTED_INK}>
+                  <tspan x={12}>Panel excluded.</tspan>
+                  {!layout.compact && (panel.geometry.message ?? 'No values to plot.').match(new RegExp(`.{1,${Math.max(1, Math.floor((panel.frame.width - 24) / 6.6))}}(?:\\s|$)|\\S+`, 'g'))?.map((line, lineIndex) => (
+                    <tspan key={lineIndex} x={12} dy={16}>{line.trim()}</tspan>
+                  ))}
+                </text>
+              ) : <>
               {/* The rest of the chart, faint, so this panel is read against it. */}
               <g aria-hidden="true">
                 {layout.panels.map((other, otherIndex) =>
@@ -113,6 +121,7 @@ export const FacetCanvas = forwardRef<SVGSVGElement, FacetCanvasProps>(
                 resetToken={0}
                 onAddAnnotation={onAddAnnotation}
               />
+              </>}
             </g>
           </svg>
         ))}
