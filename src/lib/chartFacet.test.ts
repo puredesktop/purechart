@@ -118,7 +118,7 @@ describe('logarithmic facet domains', () => {
     }
   })
 
-  it('fits exclusion notices in narrow panels and keeps thumbnail notices compact', () => {
+  it('wires panel width into notice wrapping and keeps thumbnail notices compact', () => {
     const source = parseTable('month,category,entries\nJan,A,0\nJan,B,10')
     const chart = spec('category')
     chart.chart.axes.y.scale = 'log'

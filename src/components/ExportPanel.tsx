@@ -44,7 +44,7 @@ export function ExportPanel({ session }: { session: ChartSession }) {
     <label><input type="checkbox" checked={transparent} onChange={e => setTransparent(e.target.checked)} /> Transparent background</label>
     <SelectField label="Colours" value={palette} options={[{ id: 'source', label: 'The chart’s own palette' }, { id: 'monochrome', label: 'One ink, for print' }]} onChange={id => setPalette(id as FigurePalette)} />
     <p>PNG: {settings.width * settings.scale} × {settings.height * settings.scale} pixels. SVG remains scalable.</p>
-    {preview?.warnings.map(warning => <p role="status" key={warning}>{warning}</p>)}
+    {!preview?.message && preview?.warnings.map(warning => <p role="status" key={warning}>{warning}</p>)}
     {!valid ? <p role="alert">Choose at least 320 × 240 and no more than 40 million output pixels.</p> : preview?.message ? <p role="alert">{preview.message}</p> : <Preview aria-hidden="true" dangerouslySetInnerHTML={{ __html: preview?.svg.replace(/^<\?xml[^>]*\?>\s*/, '') ?? '' }} />}
     <button disabled={busy || !valid || !!preview?.message} onClick={() => void exporting('svg')}>Export SVG</button>
     <button disabled={busy || !valid || !!preview?.message} onClick={() => void exporting('png')}>{busy ? 'Exporting…' : 'Export PNG'}</button>

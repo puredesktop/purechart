@@ -24,6 +24,8 @@ import type { DataTable } from './dataParse'
  */
 
 export interface RenderChartOptions {
+  /** In-place redraws must preserve the existing asset when any panel is lost. */
+  allowPartialPanels?: boolean
   width?: number
   height?: number
   /** Painted behind the chart. `null` leaves it transparent. */
@@ -130,7 +132,9 @@ export function renderChartSvg(
     `Panel “${panel.value}” excluded: ${panel.geometry.message ?? 'No values to plot.'}`,
   ) ?? []
   const facetError = facets?.message ?? (facets && !facets.panels.some(panel => !panel.geometry.empty)
-    ? warnings.join(' ') || 'No panels to plot.' : null)
+    ? warnings.join(' ') || 'No panels to plot.'
+    : facets?.panels.some(panel => panel.geometry.empty && (options.allowPartialPanels === false || panel.geometry.refusalReason !== 'log-y-non-positive'))
+      ? warnings.join(' ') : null)
 
   const body = stripTransient(
     renderToStaticMarkup(

@@ -65,6 +65,7 @@ export function SheetView({
           spec,
           svg: drawn.message ? null : drawn.svg.replace(/^<\?xml[^>]*\?>\s*/, ''),
           message: drawn.message,
+          warnings: drawn.warnings,
           blocking,
           checks,
         }
@@ -121,6 +122,7 @@ export function SheetView({
               <StyledCaption>{card.spec.chart.caption}</StyledCaption>
             ) : null}
           </StyledOpen>
+          {!card.message && card.warnings.length > 0 && <StyledCaption role="status">{card.warnings.join(' ')}</StyledCaption>}
           <StyledCardActions>
             <CrossAppDragHandle label="chart" disabled={!card.svg} getContent={() => {
               const full = renderChartSvg(table,card.spec,{width:1000,height:650})

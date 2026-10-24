@@ -313,6 +313,25 @@ it('exports the same-turn chart title and destination together, even through a r
   expect(new TextDecoder().decode(binaryWrite.mock.calls[0][1])).toContain('Latest revenue')
 })
 
+it.each(['svg', 'png'] as const)('preserves a linked %s figure when a log panel would be excluded', async format => {
+  await mountSession()
+  await act(async () => {
+    session.setPastedText('x,panel,y\n1,Good,10\n2,Good,100\n1,Bad,0')
+    const spec = session.liveSpec()
+    session.applyChartSpec({ ...spec, chart: { ...spec.chart, type: 'line', encodings: { x: 'x', y: ['y'], series: null }, facet: { column: 'panel', columns: 2 }, axes: { ...spec.chart.axes, y: { ...spec.chart.axes.y, scale: 'log' } } } }, { table: session.liveTable() })
+  })
+  await act(async () => {
+    expect(await session.rerenderFigures([{
+      collectionPath: '/tmp/report', relativePath: `assets/figures/chart.${format}`,
+      chartId: session.liveSheet().charts[0].id, format, width: 900, height: 540,
+      scale: 1, transparent: false, palette: 'source', fingerprint: 'old', exportedAt: '',
+    }])).toBe(0)
+  })
+  expect(binaryWrite).not.toHaveBeenCalled()
+  expect(session.error).toContain('Panel “Bad” excluded')
+  expect(session.status).toContain('reported errors')
+})
+
 
 it('opens raw data as a fresh selected document without carrying over the old charts or name', async () => {
   await mountSession()

@@ -1015,6 +1015,7 @@ export function useChartSession({
       const sourceTable = liveTableRef.current
       // Use the export preview renderer so captions and layout travel together.
       const drawn = renderChartSvg(sourceTable, snapshot, {
+        allowPartialPanels: !options?.relativePath,
         width: options?.width, height: options?.height,
         background: options?.transparent ? null : undefined,
       })
@@ -1083,6 +1084,7 @@ export function useChartSession({
         null
       try {
         const drawn = renderChartSvg(sourceTable, snapshot, {
+          allowPartialPanels: !options?.relativePath,
           width: options?.width, height: options?.height,
           background: options?.transparent ? null : undefined,
         })

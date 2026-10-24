@@ -4,6 +4,7 @@ import { CHART_TRANSIENT_ATTR } from './chartExport'
 import { defaultSpec, type ChartSpec } from './chartSpec'
 import { parseTable } from './dataParse'
 import { chartSnapshotHtml } from './chartSnapshot'
+import { defaultPresentation } from './chartPresentation'
 
 const csv = [
   'month,region,nominations',
@@ -100,6 +101,25 @@ describe('an axis someone named', () => {
 })
 
 describe('a chart split into panels', () => {
+  it('refuses partial linked redraws while allowing a new log-Y export', () => {
+    const faceted = spec()
+    faceted.chart.facet.column = 'region'
+    faceted.chart.axes.y.scale = 'log'
+    const partial = parseTable(csv.replace('Pacific,4', 'Pacific,0'))
+    expect(renderChartSvg(partial, faceted).message).toBeNull()
+    expect(renderChartSvg(partial, faceted, { allowPartialPanels: false }).message).toContain('Panel “Pacific” excluded')
+  })
+
+  it('still blocks per-panel error-interval integrity failures', () => {
+    const faceted = spec()
+    faceted.chart.facet.column = 'region'
+    faceted.chart.presentation = { ...defaultPresentation(), errorBars: { lower: 'lower', upper: 'upper' } }
+    const invalid = parseTable('month,region,nominations,lower,upper\n2026-01,Good,10,8,12\n2026-01,Bad,10,11,12')
+    const rendered = renderChartSvg(invalid, faceted)
+    expect(rendered.message).toContain('Panel “Bad” excluded')
+    expect(rendered.message).toContain('lower ≤ value ≤ upper')
+  })
+
   it('allows partial figures, previews and thumbnails with named exclusion warnings', () => {
     const faceted = spec()
     faceted.chart.facet.column = 'region'
