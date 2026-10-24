@@ -334,6 +334,29 @@ describe('computeChartGeometry', () => {
     expect(across.xTicks.map(t => t.label)).toEqual(['03-01 23:30', '03-02 00:30'])
   })
 
+  it('keeps visible times distinct for readings seconds apart across midnight', () => {
+    const midnight: DataTable = {
+      columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
+      rows: [0, 10, 20, 30, 40, 50].map((s, i) => ({ at: new Date(Date.UTC(2024, 2, 1, 23, 59, 30 + s)), v: i + 1 })),
+    }
+    for (const type of ['line', 'bar'] as const) {
+      const geometry = computeChartGeometry(midnight, specWith({ type, encodings: { x: 'at', y: ['v'], series: null } }), dims)
+      const labels = geometry.xTicks.map(t => t.label)
+      expect(labels.length).toBeGreaterThan(1)
+      expect(new Set(labels).size).toBe(labels.length)
+      expect(labels.some(label => label.includes('…'))).toBe(false)
+      expect(labels.every(label => /\d{2}:\d{2}:\d{2}$/.test(label))).toBe(true)
+      expect(geometry.xTicks.every(t => /^2024-03-0[12] /.test(t.fullLabel ?? ''))).toBe(true)
+      // The day is named where it changes, beside its neighbours' times.
+      expect(labels).toEqual(['03-01 23:59:30', '23:59:40', '23:59:50', '03-02 00:00:00', '00:00:10', '00:00:20'])
+      const wide = computeChartGeometry(midnight, specWith({ type, encodings: { x: 'at', y: ['v'], series: null } }), { width: 1000, height: 400 })
+      const wideLabels = wide.xTicks.map(t => t.label)
+      expect(wideLabels[0]).toBe('03-01 23:59:30')
+      expect(wideLabels.filter(label => label.startsWith('03-02 '))).toEqual(['03-02 00:00:00'])
+      expect(new Set(wideLabels).size).toBe(wideLabels.length)
+    }
+  })
+
   it('accepts the ISO timestamps getChartData shows as range endpoints', () => {
     const intraday: DataTable = {
       columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],

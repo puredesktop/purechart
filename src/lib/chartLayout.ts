@@ -151,15 +151,12 @@ function xKey(value: CellValue): string {
 }
 
 /**
- * Ticks show as much time as their spacing needs — seconds for ticks seconds
- * apart, milliseconds below that — and drop the day when they share one.
+ * Ticks carry as much time as their spacing needs — seconds for ticks seconds
+ * apart, milliseconds below that. readableXTicks decides what of it to print.
  */
 function intradayTickLabel(tick: Date, ticks: Date[]): string {
   const detail = dateDetailOf(ticks)
-  if (detail === 'day') return utcFormat('%Y-%m-%d')(tick)
-  const time = detail === 'minute' ? '%H:%M' : detail === 'second' ? '%H:%M:%S' : '%H:%M:%S.%L'
-  const day = (d: Date) => d.toISOString().slice(0, 10)
-  return utcFormat(ticks.every(t => day(t) === day(tick)) ? time : `%Y-%m-%d ${time}`)(tick)
+  return detail === 'day' ? utcFormat('%Y-%m-%d')(tick) : dateCategoryLabel(tick, detail)
 }
 
 function emptyGeometry(dims: ChartDims, message: string): ChartGeometry {
@@ -214,18 +211,29 @@ function isoAsCategory(label: string, detail: DateDetail): string | null {
 }
 
 /**
- * What a band axis prints for moments: the time alone when every band falls
- * on one day, the month and day when they share a year. Truncating the full
- * label from the right would leave only the shared date showing.
+ * What an axis of moments prints. Every tick shows its time — that is what
+ * tells neighbours apart — and the day only where it changes: the first tick
+ * and the first after midnight, when it fits beside its neighbours' times.
+ * Truncating the full label from the right would instead leave only the
+ * repeated date showing. The result is final: nothing truncates it further.
  */
-function compactMomentLabels(labels: string[]): string[] {
-  if (!labels.length || !labels.every(label => MOMENT_LABEL_RE.test(label))) return labels
-  if (labels.every(label => label.slice(0, 10) === labels[0].slice(0, 10))) return labels.map(label => label.slice(11))
-  if (labels.every(label => label.slice(0, 4) === labels[0].slice(0, 4))) return labels.map(label => label.slice(5))
-  return labels
+function momentAxisLabels(labels: string[], maxChars: number): string[] {
+  const days = labels.map(label => label.slice(0, 10))
+  const times = labels.map(label => truncateLabel(label.slice(11), maxChars))
+  if (days.every(day => day === days[0])) return times
+  const sameYear = days.every(day => day.slice(0, 4) === days[0].slice(0, 4))
+  const dated = labels.map((_, i) => `${sameYear ? days[i].slice(5) : days[i]} ${times[i]}`)
+  // Labels are centred on their ticks: a wide one fits if half of it and half
+  // of each neighbour share the slot between them.
+  const newDay = (i: number) => i === 0 || days[i] !== days[i - 1]
+  const width = (i: number) => (newDay(i) ? dated[i] : times[i]).length
+  const fits = (i: number) => [i - 1, i + 1].every(n => n < 0 || n >= labels.length || (dated[i].length + width(n)) / 2 <= maxChars)
+  const shown = labels.map((_, i) => newDay(i) && fits(i) ? dated[i] : times[i])
+  // Ticks a day apart at one hour need the day to differ at all.
+  return new Set(shown).size === shown.length ? shown : dated.map(label => truncateLabel(label, maxChars))
 }
 
-function readableXTicks(ticks: AxisTick[], plot: PlotRect): AxisTick[] {
+function readableXTicks(ticks: AxisTick[], plot: PlotRect, moments = false): AxisTick[] {
   if (ticks.length <= 1) return ticks
   const maxVisibleTicks = Math.max(2, Math.floor(plot.width / MIN_X_TICK_GAP))
   const step = Math.max(1, Math.ceil(ticks.length / maxVisibleTicks))
@@ -237,10 +245,13 @@ function readableXTicks(ticks: AxisTick[], plot: PlotRect): AxisTick[] {
     MIN_TRUNCATED_LABEL_LENGTH,
     Math.floor(slotWidth / X_TICK_CHAR_WIDTH),
   )
-  return visible.map(tick => ({
+  const shown = moments && visible.every(tick => MOMENT_LABEL_RE.test(tick.label))
+    ? momentAxisLabels(visible.map(tick => tick.label), maxChars)
+    : visible.map(tick => truncateLabel(tick.label, maxChars))
+  return visible.map((tick, index) => ({
     ...tick,
     fullLabel: tick.fullLabel ?? tick.label,
-    label: truncateLabel(tick.label, maxChars),
+    label: shown[index],
   }))
 }
 
@@ -600,8 +611,6 @@ export function computeChartGeometry(
       // Callers may name a band by the ISO timestamp getChartData shows.
       const byCategory = xPixelForLabel
       xPixelForLabel = label => byCategory(label) ?? byCategory(isoAsCategory(label, xDetail) ?? label)
-      const shown = compactMomentLabels(xTicks.map(tick => tick.label))
-      xTicks = xTicks.map((tick, index) => shown[index] === tick.label ? tick : { ...tick, label: shown[index], fullLabel: tick.label })
     }
   } else {
     // Only reached with a real x column: histograms are always banded.
@@ -770,7 +779,7 @@ export function computeChartGeometry(
   return {
     dims,
     plot,
-    xTicks: readableXTicks(xTicks, plot),
+    xTicks: readableXTicks(xTicks, plot, !binned && xCol?.type === 'date' && xDetail !== 'day'),
     yTicks,
     xFrame: { start: xFrameStart, end: xFrameEnd },
     yFrame: { start: yScale(axisY.min != null ? yMin : dataMin), end: yScale(axisY.max != null ? yMax : dataMax) },
