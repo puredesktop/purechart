@@ -195,6 +195,36 @@ function truncateLabel(label: string, maxChars: number): string {
   return `${label.slice(0, maxChars - 1)}…`
 }
 
+const MOMENT_LABEL_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/
+
+/**
+ * A date label back to its instant. The moment labels asCategory writes
+ * (`2024-03-01 09:30`) carry no zone but mean UTC; anything else — a bare
+ * day, or an ISO timestamp with its own zone — parses as written.
+ */
+function parseDateLabel(label: string): number {
+  return Date.parse(/^\d{4}-\d{2}-\d{2} [\d:.]+$/.test(label) ? `${label.replace(' ', 'T')}Z` : label)
+}
+
+/** An ISO timestamp such as getChartData shows, as the band category it falls in. */
+function isoAsCategory(label: string, detail: DateDetail): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(label)) return null
+  const at = Date.parse(label)
+  return Number.isFinite(at) ? dateCategoryLabel(new Date(at), detail) : null
+}
+
+/**
+ * What a band axis prints for moments: the time alone when every band falls
+ * on one day, the month and day when they share a year. Truncating the full
+ * label from the right would leave only the shared date showing.
+ */
+function compactMomentLabels(labels: string[]): string[] {
+  if (!labels.length || !labels.every(label => MOMENT_LABEL_RE.test(label))) return labels
+  if (labels.every(label => label.slice(0, 10) === labels[0].slice(0, 10))) return labels.map(label => label.slice(11))
+  if (labels.every(label => label.slice(0, 4) === labels[0].slice(0, 4))) return labels.map(label => label.slice(5))
+  return labels
+}
+
 function readableXTicks(ticks: AxisTick[], plot: PlotRect): AxisTick[] {
   if (ticks.length <= 1) return ticks
   const maxVisibleTicks = Math.max(2, Math.floor(plot.width / MIN_X_TICK_GAP))
@@ -566,6 +596,13 @@ export function computeChartGeometry(
       xPixelForLabel = label => scale(label) ?? null
       xPad = scale.step() / 2
     }
+    if (!binned && xCol?.type === 'date') {
+      // Callers may name a band by the ISO timestamp getChartData shows.
+      const byCategory = xPixelForLabel
+      xPixelForLabel = label => byCategory(label) ?? byCategory(isoAsCategory(label, xDetail) ?? label)
+      const shown = compactMomentLabels(xTicks.map(tick => tick.label))
+      xTicks = xTicks.map((tick, index) => shown[index] === tick.label ? tick : { ...tick, label: shown[index], fullLabel: tick.label })
+    }
   } else {
     // Only reached with a real x column: histograms are always banded.
     const xColumn = xCol as ColumnInfo
@@ -594,7 +631,7 @@ export function computeChartGeometry(
       xFrameEnd = scale(new Date(xHi))
       // Date labels are the ISO day or moment asCategory produced; parse them back.
       xPixelForLabel = label => {
-        const at = Date.parse(intraday && label.length > 10 ? `${label.replace(' ', 'T')}Z` : label)
+        const at = parseDateLabel(label)
         return Number.isFinite(at) ? scale(new Date(at)) : null
       }
     } else {

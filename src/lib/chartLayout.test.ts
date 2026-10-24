@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeChartGeometry } from './chartLayout'
+import { validateChartAnnotations } from './chartAnnotationValidation'
 import { defaultSpec, type ChartSpec } from './chartSpec'
 import type { DataTable } from './dataParse'
 
@@ -260,7 +261,8 @@ describe('computeChartGeometry', () => {
       ],
     }
     const bar = computeChartGeometry(intraday, specWith({ type: 'bar', encodings: { x: 'at', y: ['v'], series: null } }), dims)
-    expect(bar.xTicks.map(t => t.label)).toEqual(['2024-03-01 09:00', '2024-03-01 09:30', '2024-03-01 10:00'])
+    expect(bar.xTicks.map(t => t.label)).toEqual(['09:00', '09:30', '10:00'])
+    expect(bar.xTicks.map(t => t.fullLabel)).toEqual(['2024-03-01 09:00', '2024-03-01 09:30', '2024-03-01 10:00'])
     expect(new Set(bar.series[0]!.bars.map(b => b.x)).size).toBe(3)
 
     const line = computeChartGeometry(intraday, specWith({ type: 'line', encodings: { x: 'at', y: ['v'], series: null } }), dims)
@@ -296,7 +298,7 @@ describe('computeChartGeometry', () => {
       ],
     }
     const bar = computeChartGeometry(millis, specWith({ type: 'bar', encodings: { x: 'at', y: ['a'], series: null } }), dims)
-    expect(bar.xTicks.map(t => t.label)).toEqual(['2024-03-01 09:00:00.100', '2024-03-01 09:00:00.900'])
+    expect(bar.xTicks.map(t => t.fullLabel)).toEqual(['2024-03-01 09:00:00.100', '2024-03-01 09:00:00.900'])
     expect(new Set(bar.series[0]!.bars.map(b => b.x)).size).toBe(2)
 
     const stacked = computeChartGeometry(millis, specWith({ type: 'stacked-bar', encodings: { x: 'at', y: ['a', 'b'], series: null } }), dims)
@@ -311,6 +313,51 @@ describe('computeChartGeometry', () => {
     expect(line.xPixelForLabel(second.xLabel)).toBeCloseTo(second.cx, 6)
     const labels = line.xTicks.map(t => t.label)
     expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('prints the distinguishing time under each of six intraday bars', () => {
+    const six: DataTable = {
+      columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
+      rows: [0, 10, 20, 30, 40, 50].map((minute, i) => ({ at: new Date(Date.UTC(2024, 2, 1, 9, minute)), v: i + 1 })),
+    }
+    const bar = computeChartGeometry(six, specWith({ type: 'bar', encodings: { x: 'at', y: ['v'], series: null } }), dims)
+    const labels = bar.xTicks.map(t => t.label)
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(labels.every(label => !label.includes('…'))).toBe(true)
+    expect(labels).toContain('09:10')
+
+    const twoDays: DataTable = {
+      columns: six.columns,
+      rows: [{ at: new Date('2024-03-01T23:30:00Z'), v: 1 }, { at: new Date('2024-03-02T00:30:00Z'), v: 2 }],
+    }
+    const across = computeChartGeometry(twoDays, specWith({ type: 'bar', encodings: { x: 'at', y: ['v'], series: null } }), dims)
+    expect(across.xTicks.map(t => t.label)).toEqual(['03-01 23:30', '03-02 00:30'])
+  })
+
+  it('accepts the ISO timestamps getChartData shows as range endpoints', () => {
+    const intraday: DataTable = {
+      columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
+      rows: [
+        { at: new Date('2024-03-01T09:00:00Z'), v: 1 },
+        { at: new Date('2024-03-01T09:30:00Z'), v: 3 },
+        { at: new Date('2024-03-01T10:00:00Z'), v: 2 },
+      ],
+    }
+    const range = {
+      id: 'r', text: 'Morning', createdAt: 'now',
+      target: {
+        kind: 'range' as const,
+        x: { from: '2024-03-01T09:00:00.000Z', to: '2024-03-01T09:30:00.000Z' },
+        y: { from: 0, to: 5 },
+        summary: { count: 2, min: 1, max: 3, average: 2, change: 2 },
+      },
+    }
+    for (const type of ['line', 'bar'] as const) {
+      const spec = specWith({ type, encodings: { x: 'at', y: ['v'], series: null }, annotations: [range] })
+      const geometry = computeChartGeometry(intraday, spec, dims)
+      expect(geometry.xPixelForLabel(range.target.x.from)).toBeCloseTo(geometry.series[0]!.points[0]!.cx, 6)
+      expect(() => validateChartAnnotations(spec, [geometry])).not.toThrow()
+    }
   })
 
   it('keeps day labels for dates that carry no time', () => {
