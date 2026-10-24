@@ -4,7 +4,6 @@ import type {
   AgentToolInvokeContext,
 } from '@purescience/platform-ui/bridge/react/usePlatformAgentTools'
 import { AgentChartToolError } from '../../../lib/agentChartTools'
-import { specForChart } from '../../../lib/chartSheet'
 import { readAgentToolStringArg } from '../args'
 import type { ChartAgentToolContext } from '../../context'
 
@@ -20,7 +19,7 @@ function resolve(context: ChartAgentToolContext, id: string | null): string {
   if (!charts.some(chart => chart.id === id)) {
     throw new AgentChartToolError(
       `There is no chart "${id}" on this sheet. Its charts are: ${charts
-        .map(chart => `${chart.id} (${specForChart(context.sheet, chart.id).title})`)
+        .map(chart => `${chart.id} (${chart.spec.title})`)
         .join(', ')}.`,
     )
   }
@@ -42,7 +41,7 @@ export async function focusChartHandler(
   return {
     content: formatAgentToolJson({
       focused: target,
-      name: specForChart(context.sheet, target).title,
+      name: context.sheet.charts.find(chart => chart.id === target)!.spec.title,
     }),
   }
 }
@@ -63,7 +62,7 @@ export async function removeChartHandler(
   { arguments: args }: AgentToolInvokeContext,
 ): Promise<AgentToolHandlerResult> {
   const target = resolve(context, readAgentToolStringArg(args, 'chart'))
-  const name = specForChart(context.sheet, target).title
+  const name = context.sheet.charts.find(chart => chart.id === target)!.spec.title
   context.removeChart(target)
   return { content: formatAgentToolJson({ removed: target, name }) }
 }

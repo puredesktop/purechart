@@ -297,6 +297,30 @@ it('uses the outgoing-save guard for new documents and clears the old sheet only
 })
 
 
+it.each([
+  ['exportSvg', 'unknown'],
+  ['exportPng', 'unknown'],
+  ['exportSvg', ''],
+  ['exportPng', ''],
+  ['exportSvg', 'removed'],
+  ['exportPng', 'removed'],
+] as const)('refuses %s for a missing chart (%s) instead of exporting the first chart', async (method, target) => {
+  await mountSession()
+  await act(async () => { session.setPastedText('region,value\nNorth,20\nSouth,30') })
+  let chartId: string = target
+  if (target === 'removed') {
+    await act(async () => { session.duplicateChart(session.sheet.charts[0].id) })
+    chartId = session.sheet.focusedId!
+    await act(async () => { session.removeChart(chartId) })
+  }
+  await act(async () => {
+    expect(await session[method](null, { chartId, destination: '/tmp/export-target.chart' })).toBeNull()
+  })
+  expect(session.error).toBe(`There is no chart "${chartId}" on this sheet.`)
+  expect(write).not.toHaveBeenCalled()
+  expect(binaryWrite).not.toHaveBeenCalled()
+})
+
 it('exports the same-turn chart title and destination together, even through a retained callback', async () => {
   await mountSession()
   await act(async () => { session.setPastedText('region,revenue\nNorth,20\nSouth,30') })

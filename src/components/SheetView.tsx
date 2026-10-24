@@ -49,6 +49,7 @@ export function SheetView({
     () =>
       sheet.charts.map(chart => {
         const spec = specForChart(sheet, chart.id)
+        if (!spec) throw new Error(`There is no chart "${chart.id}" on this sheet.`)
         const drawn = renderChartSvg(table, spec, {
           width: CARD_WIDTH,
           height: CARD_HEIGHT,
@@ -73,7 +74,7 @@ export function SheetView({
   )
 
   const candidates = useMemo(() => suggestForms(table), [table])
-  const base = specForChart(sheet, sheet.charts[0]?.id ?? null)
+  const base = specForChart(sheet, null)
 
   return (
     <StyledSheet aria-label="Every chart on this sheet">

@@ -362,7 +362,7 @@ function ChartDocumentApp({
             catch (error) { sessionRef.current.reportSaveFailure(error); return }
             await recovery.recover(entry.id, recovered => {
             session.applySheet(recovered)
-            session.applyChartSpec(specForChart(recovered, recovered.focusedId), { documentPath: null, status: 'Recovered into a new draft; the original file is unchanged.' })
+            session.applyChartSpec(specForChart(recovered, recovered.focusedId) ?? specForChart(recovered, null), { documentPath: null, status: 'Recovered into a new draft; the original file is unchanged.' })
             session.resetHistory()
             })
           }}>Recover as new draft</button>
