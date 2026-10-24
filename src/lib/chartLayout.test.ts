@@ -334,27 +334,55 @@ describe('computeChartGeometry', () => {
     expect(across.xTicks.map(t => t.label)).toEqual(['03-01 23:30', '03-02 00:30'])
   })
 
+  /**
+   * What a reader needs from an axis of moments: every printed label whole
+   * and distinct, its time the tick's own, and the day named wherever it
+   * changes — so no two ticks look alike and none seems to run backwards.
+   */
+  function expectReadableMoments(table: DataTable, type: 'line' | 'bar', width: number): string[] {
+    const geometry = computeChartGeometry(table, specWith({ type, encodings: { x: 'at', y: ['v'], series: null } }), { width, height: 400 })
+    const ticks = geometry.xTicks
+    const labels = ticks.map(t => t.label)
+    const where = `${type} at ${width}px: ${labels.join(' | ')}`
+    expect(labels.length, where).toBeGreaterThan(1)
+    expect(new Set(labels).size, where).toBe(labels.length)
+    expect(labels.some(label => label.includes('…')), where).toBe(false)
+    const dayOf = (i: number) => (ticks[i].fullLabel ?? '').slice(0, 10)
+    const manyDays = ticks.some((_, i) => dayOf(i) !== dayOf(0))
+    ticks.forEach((tick, i) => {
+      const full = tick.fullLabel ?? ''
+      expect(full.endsWith(tick.label.split(' ').pop()!), where).toBe(true)
+      if (manyDays && (i === 0 || dayOf(i) !== dayOf(i - 1))) expect(tick.label, where).toContain(full.slice(5, 10))
+    })
+    return labels
+  }
+
+  const momentTable = (dates: Date[]): DataTable => ({
+    columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
+    rows: dates.map((at, i) => ({ at, v: i + 1 })),
+  })
+
   it('keeps visible times distinct for readings seconds apart across midnight', () => {
-    const midnight: DataTable = {
-      columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
-      rows: [0, 10, 20, 30, 40, 50].map((s, i) => ({ at: new Date(Date.UTC(2024, 2, 1, 23, 59, 30 + s)), v: i + 1 })),
-    }
+    const midnight = momentTable([0, 10, 20, 30, 40, 50].map(s => new Date(Date.UTC(2024, 2, 1, 23, 59, 30 + s))))
     for (const type of ['line', 'bar'] as const) {
-      const geometry = computeChartGeometry(midnight, specWith({ type, encodings: { x: 'at', y: ['v'], series: null } }), dims)
-      const labels = geometry.xTicks.map(t => t.label)
-      expect(labels.length).toBeGreaterThan(1)
-      expect(new Set(labels).size).toBe(labels.length)
-      expect(labels.some(label => label.includes('…'))).toBe(false)
-      expect(labels.every(label => /\d{2}:\d{2}:\d{2}$/.test(label))).toBe(true)
-      expect(geometry.xTicks.every(t => /^2024-03-0[12] /.test(t.fullLabel ?? ''))).toBe(true)
-      // The day is named where it changes, beside its neighbours' times.
-      expect(labels).toEqual(['03-01 23:59:30', '23:59:40', '23:59:50', '03-02 00:00:00', '00:00:10', '00:00:20'])
-      const wide = computeChartGeometry(midnight, specWith({ type, encodings: { x: 'at', y: ['v'], series: null } }), { width: 1000, height: 400 })
-      const wideLabels = wide.xTicks.map(t => t.label)
-      expect(wideLabels[0]).toBe('03-01 23:59:30')
-      expect(wideLabels.filter(label => label.startsWith('03-02 '))).toEqual(['03-02 00:00:00'])
-      expect(new Set(wideLabels).size).toBe(wideLabels.length)
+      for (const width of [400, 600, 1000]) expectReadableMoments(midnight, type, width)
     }
+    expect(expectReadableMoments(midnight, 'line', 600)).toEqual(['03-01 23:59:30', '23:59:40', '23:59:50', '03-02 00:00:00', '00:00:10', '00:00:20'])
+    expect(expectReadableMoments(midnight, 'bar', 1000)).toEqual(['03-01 23:59:30', '23:59:40', '23:59:50', '03-02 00:00:00', '00:00:10', '00:00:20'])
+  })
+
+  it('keeps the same times on two days apart on a bar axis', () => {
+    const twoDays = momentTable([1, 2].flatMap(d => [0, 10, 20].map(s => new Date(Date.UTC(2024, 2, d, 9, 0, s)))))
+    for (const width of [400, 600, 1000]) expectReadableMoments(twoDays, 'bar', width)
+    expect(expectReadableMoments(twoDays, 'bar', 600)).toEqual(['03-01 09:00:00', '09:00:20', '03-02 09:00:10'])
+  })
+
+  it('prints whole milliseconds on a narrow chart by showing fewer ticks', () => {
+    const millis = momentTable([100, 110, 120, 130, 140, 150].map(ms => new Date(Date.UTC(2024, 2, 1, 9, 0, 0, ms))))
+    for (const type of ['line', 'bar'] as const) {
+      for (const width of [400, 600]) expectReadableMoments(millis, type, width)
+    }
+    expect(expectReadableMoments(millis, 'line', 400)).toEqual(['09:00:00.100', '09:00:00.120', '09:00:00.140'])
   })
 
   it('accepts the ISO timestamps getChartData shows as range endpoints', () => {

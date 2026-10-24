@@ -213,30 +213,56 @@ function isoAsCategory(label: string, detail: DateDetail): string | null {
 /**
  * What an axis of moments prints. Every tick shows its time — that is what
  * tells neighbours apart — and the day only where it changes: the first tick
- * and the first after midnight, when it fits beside its neighbours' times.
- * Truncating the full label from the right would instead leave only the
- * repeated date showing. The result is final: nothing truncates it further.
+ * and the first after midnight, when it fits beside its neighbours. Nothing
+ * is truncated, since a cut time is a repeated time: when the labels cannot
+ * all be printed whole and distinct, this answers null and the caller shows
+ * fewer ticks.
  */
-function momentAxisLabels(labels: string[], maxChars: number): string[] {
+function momentAxisLabels(ticks: AxisTick[]): string[] | null {
+  const labels = ticks.map(tick => tick.label)
   const days = labels.map(label => label.slice(0, 10))
-  const times = labels.map(label => truncateLabel(label.slice(11), maxChars))
-  if (days.every(day => day === days[0])) return times
+  const times = labels.map(label => label.slice(11))
   const sameYear = days.every(day => day.slice(0, 4) === days[0].slice(0, 4))
   const dated = labels.map((_, i) => `${sameYear ? days[i].slice(5) : days[i]} ${times[i]}`)
-  // Labels are centred on their ticks: a wide one fits if half of it and half
-  // of each neighbour share the slot between them.
-  const newDay = (i: number) => i === 0 || days[i] !== days[i - 1]
-  const width = (i: number) => (newDay(i) ? dated[i] : times[i]).length
-  const fits = (i: number) => [i - 1, i + 1].every(n => n < 0 || n >= labels.length || (dated[i].length + width(n)) / 2 <= maxChars)
-  const shown = labels.map((_, i) => newDay(i) && fits(i) ? dated[i] : times[i])
-  // Ticks a day apart at one hour need the day to differ at all.
-  return new Set(shown).size === shown.length ? shown : dated.map(label => truncateLabel(label, maxChars))
+  // Labels are centred on their ticks: two fit if half of each shares the gap.
+  const clear = (a: number, b: number, widthA: number, widthB: number) =>
+    (widthA + widthB) * X_TICK_CHAR_WIDTH / 2 + 4 <= Math.abs(ticks[b].position - ticks[a].position)
+  let shown = times
+  if (!days.every(day => day === days[0])) {
+    const newDay = (i: number) => i === 0 || days[i] !== days[i - 1]
+    const width = (i: number) => (newDay(i) ? dated[i] : times[i]).length
+    const fitsDated = (i: number) => [i - 1, i + 1].every(n => n < 0 || n >= labels.length || clear(i, n, dated[i].length, width(n)))
+    // Times without their day would read as one day running backwards.
+    if (!labels.every((_, i) => !newDay(i) || fitsDated(i))) return null
+    shown = labels.map((_, i) => newDay(i) ? dated[i] : times[i])
+    // Ticks a day apart at one hour need the day to differ at all.
+    if (new Set(shown).size !== shown.length) shown = dated
+  }
+  if (new Set(shown).size !== shown.length) return null
+  return shown.every((label, i) => i === 0 || clear(i - 1, i, shown[i - 1].length, label.length)) ? shown : null
+}
+
+/** The fewest-dropped run of every step-th moment tick whose labels all print whole. */
+function readableMomentTicks(ticks: AxisTick[], firstStep: number): AxisTick[] | null {
+  const last = ticks[ticks.length - 1]
+  for (let step = firstStep; step < ticks.length; step += 1) {
+    const every = ticks.filter((_, index) => index % step === 0)
+    const runs = every[every.length - 1] === last ? [every] : [[...every, last], every]
+    for (const visible of runs) {
+      if (visible.length < 2) continue
+      const shown = momentAxisLabels(visible)
+      if (shown) return visible.map((tick, index) => ({ ...tick, fullLabel: tick.fullLabel ?? tick.label, label: shown[index] }))
+    }
+  }
+  return null
 }
 
 function readableXTicks(ticks: AxisTick[], plot: PlotRect, moments = false): AxisTick[] {
   if (ticks.length <= 1) return ticks
   const maxVisibleTicks = Math.max(2, Math.floor(plot.width / MIN_X_TICK_GAP))
   const step = Math.max(1, Math.ceil(ticks.length / maxVisibleTicks))
+  const moment = moments && ticks.every(tick => MOMENT_LABEL_RE.test(tick.label)) ? readableMomentTicks(ticks, step) : null
+  if (moment) return moment
   const visible = ticks.filter((_, index) => index % step === 0)
   const last = ticks[ticks.length - 1]
   if (visible[visible.length - 1] !== last) visible.push(last)
@@ -245,13 +271,11 @@ function readableXTicks(ticks: AxisTick[], plot: PlotRect, moments = false): Axi
     MIN_TRUNCATED_LABEL_LENGTH,
     Math.floor(slotWidth / X_TICK_CHAR_WIDTH),
   )
-  const shown = moments && visible.every(tick => MOMENT_LABEL_RE.test(tick.label))
-    ? momentAxisLabels(visible.map(tick => tick.label), maxChars)
-    : visible.map(tick => truncateLabel(tick.label, maxChars))
-  return visible.map((tick, index) => ({
+  return visible.map(tick => ({
     ...tick,
     fullLabel: tick.fullLabel ?? tick.label,
-    label: shown[index],
+    // Moments that cannot print whole even two at a time keep their time.
+    label: truncateLabel(moments && MOMENT_LABEL_RE.test(tick.label) ? tick.label.slice(11) : tick.label, maxChars),
   }))
 }
 
