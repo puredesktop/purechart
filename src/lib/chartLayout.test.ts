@@ -249,4 +249,38 @@ describe('computeChartGeometry', () => {
     expect(banded.xPixelForLabel('y')).toBeCloseTo(banded.xTicks[1]!.position, 6)
     expect(banded.xPad).toBeGreaterThan(0)
   })
+
+  it('keeps intraday timestamps apart and labels their ticks with the time', () => {
+    const intraday: DataTable = {
+      columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
+      rows: [
+        { at: new Date('2024-03-01T09:00:00Z'), v: 1 },
+        { at: new Date('2024-03-01T09:30:00Z'), v: 3 },
+        { at: new Date('2024-03-01T10:00:00Z'), v: 2 },
+      ],
+    }
+    const bar = computeChartGeometry(intraday, specWith({ type: 'bar', encodings: { x: 'at', y: ['v'], series: null } }), dims)
+    expect(bar.xTicks.map(t => t.label)).toEqual(['2024-03-01 09:00', '2024-03-01 09:30', '2024-03-01 10:00'])
+    expect(new Set(bar.series[0]!.bars.map(b => b.x)).size).toBe(3)
+
+    const line = computeChartGeometry(intraday, specWith({ type: 'line', encodings: { x: 'at', y: ['v'], series: null } }), dims)
+    const labels = line.xTicks.map(t => t.label)
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(labels).toContain('09:30')
+    const point = line.series[0]!.points[1]!
+    expect(point.xLabel).toBe('2024-03-01 09:30')
+    expect(line.xPixelForLabel(point.xLabel)).toBeCloseTo(point.cx, 6)
+  })
+
+  it('keeps day labels for dates that carry no time', () => {
+    const daily: DataTable = {
+      columns: [{ name: 'day', type: 'date' }, { name: 'v', type: 'number' }],
+      rows: [
+        { day: new Date('2024-03-01'), v: 1 },
+        { day: new Date('2024-03-02'), v: 2 },
+      ],
+    }
+    const bar = computeChartGeometry(daily, specWith({ type: 'bar', encodings: { x: 'day', y: ['v'], series: null } }), dims)
+    expect(bar.xTicks.map(t => t.label)).toEqual(['2024-03-01', '2024-03-02'])
+  })
 })
