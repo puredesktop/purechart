@@ -170,3 +170,39 @@ describe('how a date is quoted', () => {
     expect(found.text).toContain('2026-01-03')
   })
 })
+
+describe('finding text that has to match the arithmetic', () => {
+  it('calls the biggest move a fall when it falls', () => {
+    const spec = defaultSpec('Falling')
+    spec.chart.encodings = { x: 'month', y: ['a', 'b'], series: null, limitSeries: 0 }
+    const found = chartFindings(
+      parseTable('month,a,b\n2026-01,10,8\n2026-02,7,5\n2026-03,5,2'),
+      spec,
+    ).find(finding => finding.id === 'biggest-move')!
+    expect(found.text).toContain('steepest fall')
+    expect(found.text).not.toContain('rise')
+  })
+
+  it('does not let a series rising from nothing outrank a doubling', () => {
+    const spec = defaultSpec('Mixed')
+    spec.chart.encodings = { x: 'month', y: ['a', 'b'], series: null, limitSeries: 0 }
+    const found = chartFindings(
+      parseTable('month,a,b\n2026-01,100,0\n2026-02,150,2\n2026-03,200,5'),
+      spec,
+    ).find(finding => finding.id === 'biggest-move')!
+    expect(found.series).toBe('a')
+  })
+
+  it('compares series by x position, not by array index', () => {
+    // B is missing January. Compared by index, A's January was lined up with
+    // B's February and the chart invented a crossing that does not exist.
+    const spec = defaultSpec('Staggered')
+    spec.chart.encodings = { x: 'month', y: ['value'], series: 'region' }
+    const findings = chartFindings(
+      parseTable('month,region,value\n2026-01,A,1\n2026-02,A,10\n2026-03,A,11\n2026-02,B,2\n2026-03,B,3'),
+      spec,
+    )
+    expect(findings.find(finding => finding.id === 'no-crossing')?.text).toContain('never change places')
+    expect(findings.find(finding => finding.id === 'crossing')).toBeUndefined()
+  })
+})

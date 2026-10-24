@@ -52,6 +52,17 @@ describe('ChartCanvas', () => {
     expect(svg).toContain('North vs South')
   })
 
+  it('draws a line chart of one row as a point, not as nothing', () => {
+    const table = parseDelimited('year,north\n2023,24\n')
+    const spec = defaultSpec('One year')
+    spec.chart.type = 'line'
+    spec.chart.encodings = { x: 'year', y: ['north'], series: null }
+    const geometry = computeChartGeometry(table, spec, dims)
+    expect(geometry.series[0]!.linePath).toBeNull()
+    // A single point has no line to draw, and it used to draw no mark at all.
+    expect(renderChart(geometry, spec)).toContain('<circle')
+  })
+
   it('renders a bar chart with one rect per category', () => {
     const table = parseDelimited(CSV)
     const spec = defaultSpec('Bars')

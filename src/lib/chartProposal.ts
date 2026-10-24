@@ -81,7 +81,10 @@ export function createChartProposal(chartId: string | null, current: ChartSpec, 
   if (facetColumn && !table.columns.some(c => c.name === facetColumn)) throw new Error(`Unknown facet column: ${facetColumn}`)
   const geometry = computeChartGeometry(table, next, { width: 900, height: 540 })
   const panels = facetLayout(table, next, { width: 900, height: 540 })
-  const geometries = panels ? panels.panels.map(p => p.geometry) : [geometry]
+  // A facet layout with no panels (too small for the number of values) falls
+  // back to the single chart, so an annotation is judged against a drawing
+  // that exists rather than against an empty list.
+  const geometries = panels && panels.panels.length > 0 ? panels.panels.map(p => p.geometry) : [geometry]
   const warnings: string[] = []
   validateChartAnnotations(next, geometries)
   const findings = panels ? [] : chartFindings(table, next, geometry)

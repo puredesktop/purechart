@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   detectDelimiter,
+  parseData,
   parseDelimited,
   parseJsonData,
   parseTable,
@@ -84,4 +85,29 @@ it('rejects malformed JSON, duplicate headings and extra cells without silently 
   expect(() => parseTable('[{"a":1}')).toThrow()
   expect(() => parseTable('a,a\n1,2')).toThrow('unique')
   expect(() => parseTable('a,b\n1,2,3')).toThrow('more cells')
+})
+
+describe('parseData', () => {
+  it('reads a semicolon-separated file saved as .csv', () => {
+    const table = parseData('region;value\nNorth;3\nSouth;5', 'csv')
+    expect(table.columns.map(column => column.name)).toEqual(['region', 'value'])
+    expect(table.rows.map(row => row.value)).toEqual([3, 5])
+  })
+
+  it('keeps a plain comma CSV on commas', () => {
+    const table = parseData('region,value\nNorth,3', 'csv')
+    expect(table.columns.map(column => column.name)).toEqual(['region', 'value'])
+  })
+
+  it('does not split a one-column CSV whose cells hold semicolons', () => {
+    const table = parseData('note\nHello; world', 'csv')
+    expect(table.columns.map(column => column.name)).toEqual(['note'])
+    expect(table.rows[0]!.note).toBe('Hello; world')
+  })
+
+  it('never re-splits a tab file on the commas inside its cells', () => {
+    const table = parseData('note\nHello, world', 'tsv')
+    expect(table.columns.map(column => column.name)).toEqual(['note'])
+    expect(table.rows[0]!.note).toBe('Hello, world')
+  })
 })

@@ -4,6 +4,7 @@ import { svgAssetDataUrl } from '@purescience/platform-editor/assetTransfer.ts'
 import { useMemo, useState, useRef } from 'react'
 import { styled } from 'styled-components'
 import { applyForm, suggestForms } from '../lib/chartForms'
+import { paletteCapacity } from '../lib/chartTheme'
 import { renderChartSvg } from '../lib/chartRender'
 import { reviewChart } from '../lib/chartReview'
 import { specForChart, type ChartSheet } from '../lib/chartSheet'
@@ -72,7 +73,10 @@ export function SheetView({
     [sheet, table],
   )
 
-  const candidates = useMemo(() => suggestForms(table), [table])
+  const candidates = useMemo(
+    () => suggestForms(table, { paletteCapacity: paletteCapacity(sheet.palette.id, sheet.palette.custom) }),
+    [table, sheet.palette],
+  )
   const base = specForChart(sheet, sheet.charts[0]?.id ?? null)
 
   return (

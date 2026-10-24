@@ -6,6 +6,7 @@ import type {
 import { AgentChartToolError } from '../../../lib/agentChartTools'
 import { applyForm, suggestForms } from '../../../lib/chartForms'
 import { reviewChart } from '../../../lib/chartReview'
+import { paletteCapacity } from '../../../lib/chartTheme'
 import { readBooleanArg, readNumberArg } from '../args'
 import type { ChartAgentToolContext } from '../../context'
 
@@ -21,7 +22,9 @@ export async function chooseChartFormHandler(
   context: ChartAgentToolContext,
   { arguments: args }: AgentToolInvokeContext,
 ): Promise<AgentToolHandlerResult> {
-  const forms = suggestForms(context.table)
+  const forms = suggestForms(context.table, {
+    paletteCapacity: paletteCapacity(context.spec.chart.style.palette, context.spec.chart.style.customPalettes),
+  })
   if (forms.length === 0) {
     throw new AgentChartToolError(
       'There is no data to suggest a form for. Load or create a chart first.',

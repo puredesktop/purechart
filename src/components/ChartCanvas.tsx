@@ -535,16 +535,16 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                       />
                     </g>
                   ))}
-                {lineLike && s.linePath && (
+                {lineLike && s.points.length > 0 && (
                   <>
-                    {s.areaPath && (
+                    {s.linePath && s.areaPath && (
                       <path
                         d={s.areaPath}
                         fill={s.color}
                         fillOpacity={type === 'area' ? 0.18 : 0.05}
                       />
                     )}
-                    {type !== 'area' && (
+                    {s.linePath && type !== 'area' && (
                       <path
                         d={s.linePath}
                         fill="none"
@@ -555,19 +555,21 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                         strokeLinecap="round"
                       />
                     )}
-                    <path
-                      d={s.linePath}
-                      fill="none"
-                      stroke={s.color}
-                      strokeOpacity={type === 'area' ? 0.9 : 1}
-                      strokeWidth={
-                        type === 'area'
-                          ? style.strokeWidth + 0.4
-                          : style.strokeWidth + 0.8
-                      }
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                    />
+                    {s.linePath && (
+                      <path
+                        d={s.linePath}
+                        fill="none"
+                        stroke={s.color}
+                        strokeOpacity={type === 'area' ? 0.9 : 1}
+                        strokeWidth={
+                          type === 'area'
+                            ? style.strokeWidth + 0.4
+                            : style.strokeWidth + 0.8
+                        }
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                    )}
                     {s.points.map((point, i) => (
                       <circle
                         key={`line-pt-${i}`}

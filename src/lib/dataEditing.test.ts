@@ -1,6 +1,8 @@
 import { expect, it } from 'vitest'
 import { dataGrid, editGrid, editSheetData } from './dataEditing'
-import { parseTable } from './dataParse'
+import { parseData, parseTable } from './dataParse'
+
+const parseDataForTest = (text: string, format: 'csv' | 'tsv' | 'json') => parseData(text, format)
 import { defaultSpec, suggestEncodings } from './chartSpec'
 import { sheetFromSpec, duplicateChart } from './chartSheet'
 
@@ -78,4 +80,28 @@ it('retains an inserted empty row in a one-column table', () => {
   const next = editSheetData(sheetFromSpec(spec), parseTable('value\n1'), { kind: 'insert-row', row: 1 })
   expect(next.table.rows).toHaveLength(2)
   expect(next.table.rows[1].value).toBeNull()
+})
+
+it('edits a one-column TSV whose cells contain commas without truncating them', () => {
+  const text = 'note\nHello, world\nGoodbye, cruel world'
+  const table = parseDataForTest(text, 'tsv')
+  const sheet = sheetFromSpec(defaultSpec('Notes'))
+  sheet.data = { mode: 'inline', inline: { format: 'tsv', text } }
+  const next = editSheetData(sheet, table, { kind: 'cell', row: 0, column: 0, value: 'Hi, there' })
+  // The grid used to sniff the delimiter from the header alone, cut every
+  // cell at its comma, and write the truncation back into the document.
+  expect(next.sheet.data.inline!.text).toContain('Goodbye, cruel world')
+  expect(next.table.columns.map(column => column.name)).toEqual(['note'])
+  expect(next.table.rows[0]!.note).toBe('Hi, there')
+  expect(next.table.rows[1]!.note).toBe('Goodbye, cruel world')
+})
+
+it('shows a semicolon-separated file as the columns the chart reads', () => {
+  const text = 'region;value\nNorth;3\nSouth;5'
+  const sheet = sheetFromSpec(defaultSpec('Regions'))
+  sheet.data = { mode: 'inline', inline: { format: 'csv', text } }
+  const grid = dataGrid(text, parseDataForTest(text, 'csv'), 'csv')
+  expect(grid.columns).toEqual(['region', 'value'])
+  expect(grid.rows[1]).toEqual(['South', '5'])
+  expect(editSheetData(sheet, parseDataForTest(text, 'csv'), { kind: 'cell', row: 0, column: 1, value: '4' }).table.rows[0]!.value).toBe(4)
 })

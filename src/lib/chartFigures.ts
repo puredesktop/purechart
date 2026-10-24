@@ -101,6 +101,21 @@ export function figureFingerprint(serializedSheet: string, chartId: string | nul
   return chartFingerprint(JSON.parse(serializedSheet), chartId)
 }
 
+/**
+ * Figures whose source chart is no longer on the sheet.
+ *
+ * Their chart id still names something, but nothing on the sheet answers to
+ * it: redrawing used to fall back to the first chart and write a different
+ * picture into the document that carried the figure.
+ */
+export function orphanFigures(
+  figures: readonly FigureRecord[],
+  liveChartIds: readonly string[],
+): FigureRecord[] {
+  const live = new Set(liveChartIds)
+  return figures.filter(figure => figure.chartId !== null && !live.has(figure.chartId))
+}
+
 /** The figures drawn before the chart last changed. */
 export function staleFigures(figures: readonly FigureRecord[], fingerprintFor: (chartId: string | null) => string): FigureRecord[] {
   return figures.filter(figure => figure.fingerprint !== fingerprintFor(figure.chartId))

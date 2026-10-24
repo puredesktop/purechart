@@ -1,5 +1,5 @@
 import { csvFormatRows, dsvFormat } from 'd3'
-import { detectDelimiter, parseTable, type ColumnType, type DataTable } from './dataParse'
+import { delimiterFor, detectDelimiter, parseTable, type ColumnType, type DataFormat, type DataTable } from './dataParse'
 import type { ChartSheet } from './chartSheet'
 
 export interface DataGrid { columns: string[]; rows: string[][] }
@@ -13,9 +13,12 @@ export type DataEdit =
   | { kind: 'add-column'; name: string }
   | { kind: 'remove-column'; column: number }
 
-export function dataGrid(text: string, table: DataTable): DataGrid {
+export function dataGrid(text: string, table: DataTable, format?: DataFormat): DataGrid {
   if (text.trim() && !/^[\[{]/.test(text.trim())) {
-    const [columns = [], ...rows] = dsvFormat(detectDelimiter(text)).parseRows(text.trim())
+    // The sheet's own format decides the separator. Re-sniffing the text cut
+    // a one-column TSV whose cells contain commas at every comma, and the
+    // next edit wrote that truncation back into the document.
+    const [columns = [], ...rows] = dsvFormat(delimiterFor(text, format ?? 'csv')).parseRows(text.trim())
     return { columns, rows: rows.map(row => columns.map((_, i) => row[i] ?? '')) }
   }
   if (/^[\[{]/.test(text.trim())) {
@@ -75,7 +78,7 @@ export function editGrid(source: DataGrid, edit: DataEdit): DataGrid {
 }
 
 export function editSheetData(sheet: ChartSheet, table: DataTable, edit: DataEdit): { sheet: ChartSheet; table: DataTable } {
-  const grid = dataGrid(sheet.data.inline?.text ?? '', table)
+  const grid = dataGrid(sheet.data.inline?.text ?? '', table, sheet.data.inline?.format)
   const next = editGrid(grid, edit)
   const columnTypes = { ...sheet.data.columnTypes }
   if (edit.kind === 'type') {

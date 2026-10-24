@@ -2,7 +2,7 @@ import { DataGridEditor } from './DataGridEditor'
 import type { DataEdit } from '../lib/dataEditing'
 import { columnRefs } from '../lib/agentRefs'
 import { styled } from 'styled-components'
-import type { ColumnTypes, DataTable } from '../lib/dataParse'
+import type { ColumnTypes, DataFormat, DataTable } from '../lib/dataParse'
 
 /**
  * The table, as the other half of the figure.
@@ -18,6 +18,7 @@ const MAX_ROWS = 200
 interface TableDrawerProps {
   columnTypes?: ColumnTypes
   sourceText?: string
+  format?: DataFormat
   onEdit?: (edit: DataEdit) => void
   table: DataTable
   open: boolean
@@ -27,6 +28,7 @@ interface TableDrawerProps {
 export function TableDrawer({
   table,
   sourceText = '',
+  format,
   columnTypes,
   onEdit,
   open,
@@ -51,7 +53,7 @@ export function TableDrawer({
         <StyledNote>Source data</StyledNote>
       </StyledBar>
 
-      {open && onEdit ? <DataGridEditor columnTypes={columnTypes} table={table} sourceText={sourceText} onEdit={onEdit} /> : open ? (
+      {open && onEdit ? <DataGridEditor columnTypes={columnTypes} table={table} sourceText={sourceText} format={format} onEdit={onEdit} /> : open ? (
         <StyledScroll>
           <StyledTable>
             <thead>

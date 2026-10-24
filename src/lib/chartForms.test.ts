@@ -135,3 +135,29 @@ it('does not misclassify increasing measurements as a time axis', () => {
   expect(form?.type).toBe('bar')
   expect(form?.encodings).toMatchObject({ x: 'region', y: ['value'] })
 })
+
+describe('more categories than a palette can name', () => {
+  const many = parseTable(
+    [
+      'month,category,entries',
+      ...Array.from({ length: 10 }, (_, index) => `2026-01,Category ${index + 1},${10 + index}`)
+        .concat(Array.from({ length: 10 }, (_, index) => `2026-02,Category ${index + 1},${20 + index}`)),
+    ].join('\n'),
+  )
+
+  it('does not lead with a split the palette cannot keep apart', () => {
+    // The auto-applied form used to be a ten-series line the review blocks,
+    // while the honest panel-each candidate sat one rank below it.
+    const first = suggestForms(many)[0]!
+    expect(first.facet).toBe('category')
+    expect(first.encodings.series).toBeNull()
+  })
+
+  it('follows a narrower palette', () => {
+    const first = suggestForms(many, { paletteCapacity: 4 })[0]!
+    expect(first.facet).toBe('category')
+    const wideEnough = parseTable('month,region,entries\n2026-01,A,1\n2026-02,B,2\n2026-03,C,3')
+    expect(suggestForms(wideEnough)[0]!.encodings.series).toBe('region')
+    expect(suggestForms(wideEnough, { paletteCapacity: 2 })[0]!.encodings.series).toBeNull()
+  })
+})

@@ -654,6 +654,7 @@ export function ChartWorkspace({
           <TableDrawer
             columnTypes={session.spec.data.columnTypes}
             sourceText={session.spec.data.inline?.text ?? ''}
+            format={session.spec.data.inline?.format}
             onEdit={session.editData}
             table={session.table}
             open={tableOpen}
