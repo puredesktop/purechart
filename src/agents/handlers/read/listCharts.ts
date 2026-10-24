@@ -22,6 +22,7 @@ export async function listChartsHandler(
       onSheet: sheet.focusedId === null,
       charts: sheet.charts.map((chart, index) => {
         const spec = specForChart(sheet, chart.id)
+        if (!spec) throw new Error(`There is no chart "${chart.id}" on this sheet.`)
         const review = reviewChart(context.table, spec)
         return {
           index,

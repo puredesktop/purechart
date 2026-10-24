@@ -40,39 +40,60 @@ describe('a document that was one chart', () => {
   })
 })
 
+describe('looking up a chart', () => {
+  it('does not substitute the first chart for an unknown or removed id', () => {
+    let sheet = sheetFromSpec(lineSpec('First'))
+    sheet = addChart(sheet, lineSpec('Second'))
+    const removedId = sheet.focusedId!
+    expect(specForChart(sheet, removedId)?.title).toBe('Second')
+    sheet = removeChart(sheet, removedId)
+    expect(specForChart(sheet, 'unknown')).toBeUndefined()
+    expect(specForChart(sheet, '')).toBeUndefined()
+    expect(specForChart(sheet, removedId)).toBeUndefined()
+    expect(specForChart(sheet, null)?.title).toBe('First')
+    expect(specForChart(sheet, sheet.charts[0]!.id)?.title).toBe('First')
+  })
+
+  it('only supplies a blank spec for a null id on an empty sheet', () => {
+    const sheet = { ...emptySheet('Empty sheet'), charts: [] }
+    expect(specForChart(sheet, null).title).toBe('Empty sheet')
+    expect(specForChart(sheet, 'unknown')).toBeUndefined()
+  })
+})
+
 describe('what belongs to the sheet', () => {
   let sheet = emptySheet('Two readings')
   sheet = addChart(sheet, lineSpec('Bars'))
 
   it('gives every chart the same data', () => {
     sheet = withChart(sheet, sheet.charts[0]!.id, {
-      ...specForChart(sheet, sheet.charts[0]!.id),
+      ...specForChart(sheet, sheet.charts[0]!.id)!,
       data: { mode: 'inline', inline: { format: 'csv', text: 'a,b\n1,2' } },
     })
     for (const chart of sheet.charts) {
-      expect(specForChart(sheet, chart.id).data.inline?.text).toBe('a,b\n1,2')
+      expect(specForChart(sheet, chart.id)!.data.inline?.text).toBe('a,b\n1,2')
     }
   })
 
   it('gives every chart the same palette, so a colour means one thing', () => {
     const first = sheet.charts[0]!.id
-    const current = specForChart(sheet, first)
+    const current = specForChart(sheet, first)!
     sheet = withChart(sheet, first, {
       ...current,
       chart: { ...current.chart, style: { ...current.chart.style, palette: 'ember' } },
     })
     for (const chart of sheet.charts) {
-      expect(specForChart(sheet, chart.id).chart.style.palette).toBe('ember')
+      expect(specForChart(sheet, chart.id)!.chart.style.palette).toBe('ember')
     }
   })
 
   it('keeps form and encodings to the chart they belong to', () => {
     const [first, second] = sheet.charts
-    const changed = specForChart(sheet, first!.id)
+    const changed = specForChart(sheet, first!.id)!
     changed.chart.type = 'bar'
     sheet = withChart(sheet, first!.id, changed)
-    expect(specForChart(sheet, first!.id).chart.type).toBe('bar')
-    expect(specForChart(sheet, second!.id).chart.type).not.toBe('bar')
+    expect(specForChart(sheet, first!.id)!.chart.type).toBe('bar')
+    expect(specForChart(sheet, second!.id)!.chart.type).not.toBe('bar')
   })
 })
 
@@ -82,7 +103,7 @@ describe('adding a chart', () => {
     const firstId = before.charts[0]!.id
     const after = addChart(before, defaultSpec('Bars'))
     expect(after.charts).toHaveLength(2)
-    expect(specForChart(after, firstId).chart.encodings.x).toBe('month')
+    expect(specForChart(after, firstId)!.chart.encodings.x).toBe('month')
   })
 
   it('focuses the new one, because that is what you just asked for', () => {
@@ -138,7 +159,7 @@ describe('saving and opening', () => {
     const read = migrateSheet(JSON.parse(serializeSheet(sheet)))
     expect(read.charts).toHaveLength(2)
     expect(read.data.inline?.text).toContain('Aotearoa')
-    expect(specForChart(read, read.charts[0]!.id).chart.encodings.x).toBe('month')
+    expect(specForChart(read, read.charts[0]!.id)!.chart.encodings.x).toBe('month')
   })
 
   it('reads a document written before sheets existed', () => {
@@ -160,10 +181,10 @@ describe('naming', () => {
     let sheet = sheetFromSpec(lineSpec('Nominations 2026'))
     sheet = addChart(sheet, defaultSpec('Bars'))
     const focused = sheet.focusedId!
-    const spec = specForChart(sheet, focused)
+    const spec = specForChart(sheet, focused)!
     sheet = withChart(sheet, focused, { ...spec, title: 'Which region is biggest' })
     expect(sheet.title).toBe('Nominations 2026')
-    expect(specForChart(sheet, focused).title).toBe('Which region is biggest')
+    expect(specForChart(sheet, focused)!.title).toBe('Which region is biggest')
   })
 
   it('renames the document on its own', () => {
