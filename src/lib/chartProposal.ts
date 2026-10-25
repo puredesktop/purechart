@@ -100,6 +100,7 @@ export function createChartProposal(chartId: string | null, current: ChartSpec, 
   if (next.chart.annotations.length) warnings.push('Annotation targets were checked against plotted data. Review the wording of their claims.')
   const drawn = renderChartSvg(table, next)
   if (drawn.message) throw new Error(drawn.message)
+  warnings.push(...drawn.warnings)
   const review = reviewChart(table, next)
   warnings.push(...review.findings.map(f => `${f.title}: ${f.detail}`))
   const normalizedCurrent = migrateSpec(current)

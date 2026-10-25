@@ -24,6 +24,14 @@ it('labels free-form claims and rejects nonexistent annotation targets', () => {
   expect(createChartProposal('chart1', spec, table, { ...input, patch: { caption: 'The policy caused this rise.' } }).warnings.join(' ')).toContain('not verified')
   expect(() => createChartProposal('chart1', spec, table, { ...input, patch: { annotations: [{ id: 'a', createdAt: 'now', text: 'Peak', target: { kind: 'point', seriesKey: 'value', xLabel: '2024', value: 999 } }] } })).toThrow('does not target')
 })
+it('carries excluded-panel warnings into partial proposal previews', () => {
+  const faceted = createChartAgentSpec({ dataText: 'year,value,panel\n2022,10,Good\n2023,0,Bad', type: 'line' })
+  faceted.spec.chart.facet.column = 'panel'
+  faceted.spec.chart.axes.y.scale = 'log'
+  const proposed = createChartProposal('chart1', faceted.spec, faceted.table, input)
+  expect(proposed.preview).toContain('Panel excluded.')
+  expect(proposed.warnings).toContain('Panel “Bad” excluded: Log Y requires positive values and a line or scatter chart.')
+})
 it('rejects invalid encodings, unrenderable axes, malformed patches and empty edits', () => {
   expect(() => createChartProposal('chart1', spec, table, { ...input, patch: { y: ['missing'] } })).toThrow()
   expect(() => createChartProposal('chart1', spec, table, { ...input, patch: { axes: { ...spec.chart.axes, y: { ...spec.chart.axes.y, min: 100, max: 1 } } } })).toThrow('bounds')

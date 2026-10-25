@@ -22,7 +22,8 @@ export interface DataTable {
 
 const DELIMITER_CANDIDATES = [',', '\t', ';', '|']
 
-const NUMBER_RE = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/
+// A leading zero followed by another digit (`01234`) is an identifier, not a number.
+const NUMBER_RE = /^[-+]?((0|[1-9]\d*)(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/
 const DATE_RE = /^\d{4}[-/]\d{1,2}([-/]\d{1,2})?([ T][\d:.]+.*)?$/
 
 export const EMPTY_TABLE: DataTable = { columns: [], rows: [] }

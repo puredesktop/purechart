@@ -50,6 +50,7 @@ export function SheetView({
     () =>
       sheet.charts.map(chart => {
         const spec = specForChart(sheet, chart.id)
+        if (!spec) throw new Error(`There is no chart "${chart.id}" on this sheet.`)
         const drawn = renderChartSvg(table, spec, {
           width: CARD_WIDTH,
           height: CARD_HEIGHT,
@@ -66,6 +67,7 @@ export function SheetView({
           spec,
           svg: drawn.message ? null : drawn.svg.replace(/^<\?xml[^>]*\?>\s*/, ''),
           message: drawn.message,
+          warnings: drawn.warnings,
           blocking,
           checks,
         }
@@ -77,7 +79,7 @@ export function SheetView({
     () => suggestForms(table, { paletteCapacity: paletteCapacity(sheet.palette.id, sheet.palette.custom) }),
     [table, sheet.palette],
   )
-  const base = specForChart(sheet, sheet.charts[0]?.id ?? null)
+  const base = specForChart(sheet, null)
 
   return (
     <StyledSheet aria-label="Every chart on this sheet">
@@ -125,6 +127,7 @@ export function SheetView({
               <StyledCaption>{card.spec.chart.caption}</StyledCaption>
             ) : null}
           </StyledOpen>
+          {!card.message && card.warnings.length > 0 && <StyledCaption role="status">{card.warnings.join(' ')}</StyledCaption>}
           <StyledCardActions>
             <CrossAppDragHandle label="chart" disabled={!card.svg} getContent={() => {
               const full = renderChartSvg(table,card.spec,{width:1000,height:650})
