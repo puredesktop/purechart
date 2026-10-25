@@ -43,6 +43,13 @@ describe('parseDelimited', () => {
     expect(table.rows[1].b).toBe(9)
   })
 
+  it('keeps leading-zero identifiers as text', () => {
+    const table = parseDelimited('code,value\n01234,1\n00007,2\n')
+    expect(table.columns[0]).toEqual({ name: 'code', type: 'string' })
+    expect(table.rows.map(row => row.code)).toEqual(['01234', '00007'])
+    expect(parseDelimited('v\n0\n0.5\n-0.25\n').columns[0].type).toBe('number')
+  })
+
   it('returns an empty table for blank input', () => {
     expect(parseDelimited('   ')).toEqual({ columns: [], rows: [] })
   })

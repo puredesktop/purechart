@@ -83,6 +83,7 @@ export interface ChartGeometry {
   series: SeriesGeometry[]
   empty: boolean
   message: string | null
+  refusalReason?: 'log-y-non-positive'
   /**
    * The scales, for anything stored in data coordinates (saved range
    * annotations): the pixel centre of an x label as getChartData shows
@@ -159,7 +160,7 @@ function intradayTickLabel(tick: Date, ticks: Date[]): string {
   return detail === 'day' ? utcFormat('%Y-%m-%d')(tick) : dateCategoryLabel(tick, detail)
 }
 
-function emptyGeometry(dims: ChartDims, message: string): ChartGeometry {
+function emptyGeometry(dims: ChartDims, message: string, refusalReason?: ChartGeometry['refusalReason']): ChartGeometry {
   return {
     dims,
     plot: plotRectFor(dims, DEFAULT_MARGINS),
@@ -170,6 +171,7 @@ function emptyGeometry(dims: ChartDims, message: string): ChartGeometry {
     series: [],
     empty: true,
     message,
+    refusalReason,
     xPixelForLabel: () => null,
     yPixelForValue: () => 0,
     yValueAtPixel: () => 0,
@@ -561,7 +563,7 @@ export function computeChartGeometry(
   const forced = options.yDomain
   const axisY = spec.chart.axes.y
   const logY = axisY.scale === 'log'
-  if (logY && (barLike || domainValues.some(value => value <= 0))) return emptyGeometry(dims, 'Log Y requires positive values and a line or scatter chart.')
+  if (logY && (barLike || domainValues.some(value => value <= 0))) return emptyGeometry(dims, 'Log Y requires positive values and a line or scatter chart.', !barLike ? 'log-y-non-positive' : undefined)
   const yMin = axisY.min ?? (forced ? (barLike ? Math.min(0, forced[0]) : forced[0]) : barLike ? Math.min(0, dataMin) : dataMin)
   const yMax = axisY.max ?? (forced ? (barLike ? Math.max(0, forced[1]) : forced[1]) : barLike ? Math.max(0, dataMax) : dataMax)
   if (yMin > yMax || (yMin === yMax && (axisY.min != null || axisY.max != null)) || (logY && yMin <= 0)) return emptyGeometry(dims, 'Y bounds must increase; logarithmic bounds must be positive.')

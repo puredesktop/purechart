@@ -13,6 +13,7 @@ vi.mock('../bridge/platformBridge', () => ({
 import { useChartSession } from './useChartSession'
 import { defaultSpec } from '../lib/chartSpec'
 import { migrateSheet, serializeSheet } from '../lib/chartSheet'
+import { parseFigures } from '../lib/chartFigures'
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
@@ -297,6 +298,30 @@ it('uses the outgoing-save guard for new documents and clears the old sheet only
 })
 
 
+it.each([
+  ['exportSvg', 'unknown'],
+  ['exportPng', 'unknown'],
+  ['exportSvg', ''],
+  ['exportPng', ''],
+  ['exportSvg', 'removed'],
+  ['exportPng', 'removed'],
+] as const)('refuses %s for a missing chart (%s) instead of exporting the first chart', async (method, target) => {
+  await mountSession()
+  await act(async () => { session.setPastedText('region,value\nNorth,20\nSouth,30') })
+  let chartId: string = target
+  if (target === 'removed') {
+    await act(async () => { session.duplicateChart(session.sheet.charts[0].id) })
+    chartId = session.sheet.focusedId!
+    await act(async () => { session.removeChart(chartId) })
+  }
+  await act(async () => {
+    expect(await session[method](null, { chartId, destination: '/tmp/export-target.chart' })).toBeNull()
+  })
+  expect(session.error).toBe(`There is no chart "${chartId}" on this sheet.`)
+  expect(write).not.toHaveBeenCalled()
+  expect(binaryWrite).not.toHaveBeenCalled()
+})
+
 it('exports the same-turn chart title and destination together, even through a retained callback', async () => {
   await mountSession()
   await act(async () => { session.setPastedText('region,revenue\nNorth,20\nSouth,30') })
@@ -307,11 +332,51 @@ it('exports the same-turn chart title and destination together, even through a r
     const next = { ...session.liveSpec(), title: 'Latest revenue' }
     session.applyChartSpec(next, { table: session.liveTable() })
     const result = await exportBeforeRender(null)
-    expect(result).toEqual({ kind: 'file', path: '/tmp/new-destination.chart/assets/figures/latest-revenue.svg' })
+    expect(result).toEqual({ kind: 'file', path: '/tmp/new-destination.chart/assets/figures/latest-revenue.svg', linked: true })
   })
   expect(binaryWrite).toHaveBeenCalledTimes(1)
   expect(new TextDecoder().decode(binaryWrite.mock.calls[0][1])).toContain('Latest revenue')
 })
+
+it.each(['svg', 'png'] as const)('preserves a linked %s figure when a log panel would be excluded', async format => {
+  await mountSession()
+  await act(async () => {
+    session.setPastedText('x,panel,y\n1,Good,10\n2,Good,100\n1,Bad,0')
+    const spec = session.liveSpec()
+    session.applyChartSpec({ ...spec, chart: { ...spec.chart, type: 'line', encodings: { x: 'x', y: ['y'], series: null }, facet: { column: 'panel', columns: 2 }, axes: { ...spec.chart.axes, y: { ...spec.chart.axes.y, scale: 'log' } } } }, { table: session.liveTable() })
+  })
+  await act(async () => {
+    expect(await session.rerenderFigures([{
+      collectionPath: '/tmp/report', relativePath: `assets/figures/chart.${format}`,
+      chartId: session.liveSheet().charts[0].id, format, width: 900, height: 540,
+      scale: 1, transparent: false, palette: 'source', fingerprint: 'old', exportedAt: '',
+    }])).toBe(0)
+  })
+  expect(binaryWrite).not.toHaveBeenCalled()
+  expect(session.error).toContain('Panel “Bad” excluded')
+  expect(session.status).toContain('reported errors')
+})
+
+it.each([null, '/tmp/source.chart.json', '/tmp/source.chart'])(
+  'reports a linked export only when the redraw record is written (source=%s)',
+  async source => {
+    await mountSession()
+    await act(async () => {
+      session.setPastedText('region,revenue\nNorth,20\nSouth,30')
+      session.bindDocumentPath(source)
+    })
+    let result!: Awaited<ReturnType<typeof session.exportSvg>>
+    await act(async () => {
+      // A draft path returned by saveDocument need not be bound in the session yet.
+      result = await session.exportSvg(null, { basePath: source ?? '/tmp/draft.chart' })
+    })
+    const records = write.mock.calls.filter(([path]) => path.endsWith('/figures.json'))
+    const linked = source === '/tmp/source.chart'
+    expect(records).toHaveLength(linked ? 1 : 0)
+    if (linked) expect(parseFigures(records[0][1])).toHaveLength(1)
+    expect(result).toMatchObject({ kind: 'file', linked })
+  },
+)
 
 
 it('opens raw data as a fresh selected document without carrying over the old charts or name', async () => {

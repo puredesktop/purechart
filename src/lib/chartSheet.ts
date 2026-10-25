@@ -82,10 +82,14 @@ export function emptySheet(title = 'Untitled chart'): ChartSheet {
  * The sheet's data and palette are folded in, so anything downstream — the
  * renderer, the review, the agent handlers — reads a complete, ordinary spec
  * and never has to know it came from a sheet.
+ * A null id selects the first chart (or a blank spec on an empty sheet);
+ * an unknown explicit id returns undefined.
  */
-export function specForChart(sheet: ChartSheet, id: string | null): ChartSpec {
-  const chart =
-    sheet.charts.find(entry => entry.id === id) ?? sheet.charts[0] ?? null
+export function specForChart(sheet: ChartSheet, id: null): ChartSpec
+export function specForChart(sheet: ChartSheet, id: string | null): ChartSpec | undefined
+export function specForChart(sheet: ChartSheet, id: string | null): ChartSpec | undefined {
+  const chart = id === null ? sheet.charts[0] : sheet.charts.find(entry => entry.id === id)
+  if (id !== null && !chart) return undefined
   const base = chart?.spec ?? defaultSpec(sheet.title)
   return {
     ...base,

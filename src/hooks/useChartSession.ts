@@ -83,7 +83,7 @@ interface UseChartSessionArgs {
 
 /** Where an export landed: a file beside the document, or a browser download. */
 export type ChartExportResult =
-  | { kind: 'file'; path: string }
+  | { kind: 'file'; path: string; linked: boolean }
   | { kind: 'download'; fileName: string }
 
 export interface ChartExportOptions {
@@ -306,7 +306,7 @@ export function useChartSession({
   // Every existing reader wants one chart, so the focused chart is served as a
   // whole spec with the sheet's shared data and palette folded back in.
   const spec = useMemo(
-    () => specForChart(sheet, sheet.focusedId),
+    () => specForChart(sheet, sheet.focusedId) ?? specForChart(sheet, null),
     [sheet],
   )
   const [table, setTable] = useState<DataTable>(EMPTY_TABLE)
@@ -369,7 +369,7 @@ export function useChartSession({
     const current = liveSheetRef.current
     if (current.title !== next.title || current.data !== next.data || current.palette !== next.palette || current.charts !== next.charts) recordHistory(group)
     liveSheetRef.current = next
-    liveSpecRef.current = specForChart(next, next.focusedId)
+    liveSpecRef.current = specForChart(next, next.focusedId) ?? specForChart(next, null)
     setSheet(next)
   }, [])
 
@@ -401,7 +401,7 @@ export function useChartSession({
     if (!restored) return
     loadGeneration.current += 1
     liveSheetRef.current = restored.sheet
-    liveSpecRef.current = specForChart(restored.sheet, restored.sheet.focusedId)
+    liveSpecRef.current = specForChart(restored.sheet, restored.sheet.focusedId) ?? specForChart(restored.sheet, null)
     liveTableRef.current = restored.table
     setSheet(restored.sheet)
     setTable(restored.table)
@@ -945,9 +945,9 @@ export function useChartSession({
 
   // The chart to draw: the one on screen, or the one a figure names; in its
   // own colours, or in one ink for print.
-  const specToDraw = (options?: ChartExportOptions): ChartSpec => {
-    const base = options?.chartId ? specForChart(liveSheetRef.current, options.chartId) : liveSpecRef.current
-    if (options?.palette !== 'monochrome') return base
+  const specToDraw = (options?: ChartExportOptions): ChartSpec | undefined => {
+    const base = options?.chartId != null ? specForChart(liveSheetRef.current, options.chartId) : liveSpecRef.current
+    if (!base || options?.palette !== 'monochrome') return base
     return { ...base, chart: { ...base.chart, style: { ...base.chart.style, palette: 'mono' } } }
   }
 
@@ -968,7 +968,7 @@ export function useChartSession({
     format: 'svg' | 'png',
     drawn: { width: number; height: number },
     options?: ChartExportOptions,
-  ) => {
+  ): Promise<boolean> => {
     const chartPath = documentPathRef.current
     const sheet = liveSheetRef.current
     const chartId = options?.chartId ?? sheet.focusedId ?? sheet.charts[0]?.id ?? null
@@ -1001,7 +1001,9 @@ export function useChartSession({
       await writeTextFile(`${chartPath}/${FIGURES_FILE}`, serializeFigures(next))
       figuresRef.current = next
       setFigures(next)
+      return true
     }
+    return false
   }
 
   const exportSvg = useCallback(
@@ -1011,10 +1013,12 @@ export function useChartSession({
     ): Promise<ChartExportResult | null> => {
       setError(null)
       const snapshot = specToDraw(options)
+      if (!snapshot) { setError(`There is no chart "${options?.chartId}" on this sheet.`); return null }
       const sourcePath = documentPathRef.current
       const sourceTable = liveTableRef.current
       // Use the export preview renderer so captions and layout travel together.
       const drawn = renderChartSvg(sourceTable, snapshot, {
+        allowPartialPanels: !options?.relativePath,
         width: options?.width, height: options?.height,
         background: options?.transparent ? null : undefined,
       })
@@ -1047,13 +1051,13 @@ export function useChartSession({
       const output = outputFor(base, snapshot.title, 'svg', options)
       try {
         await writeBinaryFile(output.absolutePath, toUtf8Bytes(svgString))
-        await registerFigure(output, base, snapshot.title, 'svg', drawn, options)
+        const linked = await registerFigure(output, base, snapshot.title, 'svg', drawn, options)
         setStatus(
           options?.relativePath
             ? `Redrew ${fileNameFromPath(output.absolutePath)}`
             : `Exported ${fileNameFromPath(output.absolutePath)} + copied embed`,
         )
-        return { kind: 'file', path: output.absolutePath }
+        return { kind: 'file', path: output.absolutePath, linked }
       } catch (exportError) {
         setError(
           exportError instanceof Error
@@ -1073,6 +1077,7 @@ export function useChartSession({
     ): Promise<ChartExportResult | null> => {
       setError(null)
       const snapshot = specToDraw(options)
+      if (!snapshot) { setError(`There is no chart "${options?.chartId}" on this sheet.`); return null }
       const sourcePath = documentPathRef.current
       const sourceTable = liveTableRef.current
       const base =
@@ -1083,6 +1088,7 @@ export function useChartSession({
         null
       try {
         const drawn = renderChartSvg(sourceTable, snapshot, {
+          allowPartialPanels: !options?.relativePath,
           width: options?.width, height: options?.height,
           background: options?.transparent ? null : undefined,
         })
@@ -1104,9 +1110,9 @@ export function useChartSession({
         }
         const output = outputFor(base, snapshot.title, 'png', options)
         await writeBinaryFile(output.absolutePath, pngBytes)
-        await registerFigure(output, base, snapshot.title, 'png', drawn, options)
+        const linked = await registerFigure(output, base, snapshot.title, 'png', drawn, options)
         setStatus(options?.relativePath ? `Redrew ${fileNameFromPath(output.absolutePath)}` : `Exported ${fileNameFromPath(output.absolutePath)}`)
-        return { kind: 'file', path: output.absolutePath }
+        return { kind: 'file', path: output.absolutePath, linked }
       } catch (exportError) {
         setError(
           exportError instanceof Error
