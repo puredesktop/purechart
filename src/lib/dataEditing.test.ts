@@ -105,3 +105,15 @@ it('shows a semicolon-separated file as the columns the chart reads', () => {
   expect(grid.rows[1]).toEqual(['South', '5'])
   expect(editSheetData(sheet, parseDataForTest(text, 'csv'), { kind: 'cell', row: 0, column: 1, value: '4' }).table.rows[0]!.value).toBe(4)
 })
+
+it.each([';', '|', '\t'])('round-trips a single CSV column containing sniffed separator %s', separator => {
+  const name = `notes${separator}detail`
+  const spec = defaultSpec()
+  spec.data = { mode: 'inline', inline: { format: 'json', text: JSON.stringify([{ [name]: `a${separator}b` }]) } }
+  const table = parseData(spec.data.inline!.text, 'json')
+  const edited = editSheetData(sheetFromSpec(spec), table, { kind: 'cell', row: 0, column: 0, value: `c${separator}d` })
+  const text = edited.sheet.data.inline!.text
+  const reopened = parseData(text, 'csv')
+  expect(reopened.columns.map(c => c.name)).toEqual([name])
+  expect(dataGrid(text, reopened, 'csv').rows).toEqual([[`c${separator}d`]])
+})

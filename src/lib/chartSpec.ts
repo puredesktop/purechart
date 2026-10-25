@@ -305,7 +305,10 @@ export function migrateSpec(raw: unknown): ChartSpec {
       ...(sanitizeTransform(chart.transform) ? { transform: sanitizeTransform(chart.transform) } : {}),
       encodings: {
         x: typeof encodings.x === 'string' ? encodings.x : null,
-        y: asStringArray(encodings.y),
+        // Legacy series charts only drew y[0]. Preserve that drawing on load.
+        y: typeof encodings.series === 'string' && encodings.series
+          ? asStringArray(encodings.y).slice(0, 1)
+          : asStringArray(encodings.y),
         series: typeof encodings.series === 'string' ? encodings.series : null,
         limitSeries: asSeriesLimit(encodings.limitSeries),
       },

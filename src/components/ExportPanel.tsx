@@ -27,6 +27,7 @@ export function ExportPanel({ session }: { session: ChartSession }) {
     finally { setBusy(false) }
   }
   const stale = new Set(session.staleFigures)
+  const orphans = new Set(session.orphanedFigures)
   const redrawing = async (which?: typeof session.figures) => {
     setBusy(true)
     try { await session.rerenderFigures(which) }
@@ -50,12 +51,12 @@ export function ExportPanel({ session }: { session: ChartSession }) {
     <p>Saved documents export to their assets/figures folder. Unsaved standalone charts download to your computer.</p>
     {session.figures.length ? <Figures aria-label="Figures drawn from this chart">
       <h4>Drawn into</h4>
-      <p data-stale={session.staleFigures.length > 0 || undefined}>{sayStale(session.staleFigures.length)}</p>
+      <p data-stale={session.staleFigures.length > 0 || undefined}>{orphans.size && !session.staleFigures.length ? 'No figures need redrawing.' : sayStale(session.staleFigures.length)}</p>
       <ul>
         {session.figures.map(figure => <li key={`${figure.collectionPath}/${figure.relativePath}`} data-stale={stale.has(figure) || undefined}>
           <span>{figure.relativePath.split('/').pop()}</span>
-          <small>{figure.collectionPath.split('/').pop()} · {figure.width}×{figure.height}{figure.scale > 1 ? ` @${figure.scale}×` : ''}{figure.palette === 'monochrome' ? ' · one ink' : ''}{stale.has(figure) ? ' · behind' : ''}</small>
-          <button type="button" disabled={busy} onClick={() => void redrawing([figure])}>Redraw</button>
+          <small>{figure.collectionPath.split('/').pop()} · {figure.width}×{figure.height}{figure.scale > 1 ? ` @${figure.scale}×` : ''}{figure.palette === 'monochrome' ? ' · one ink' : ''}{orphans.has(figure) ? ' · source chart removed' : stale.has(figure) ? ' · behind' : ''}</small>
+          {!orphans.has(figure) ? <button type="button" disabled={busy} onClick={() => void redrawing([figure])}>Redraw</button> : null}
           <button type="button" disabled={busy} onClick={() => void session.forgetFigure(figure)} aria-label={`Stop tracking ${figure.relativePath}`}>Forget</button>
         </li>)}
       </ul>

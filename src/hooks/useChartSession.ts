@@ -218,6 +218,8 @@ export interface ChartSession {
   figures: FigureRecord[]
   /** The ones drawn before the chart last changed. */
   staleFigures: FigureRecord[]
+  /** Figures whose source chart was removed; only forgetting is available. */
+  orphanedFigures: FigureRecord[]
   /** Redraw figures in place — the stale ones unless told which. Resolves with how many were redrawn. */
   rerenderFigures: (figures?: readonly FigureRecord[]) => Promise<number>
   /** Stop tracking a figure that was removed from its collection. */
@@ -723,6 +725,10 @@ export function useChartSession({
   const addY = useCallback((column: string) => {
     updateSpec(current => {
       if (current.chart.encodings.y.includes(column)) return current
+      if (current.chart.encodings.series && current.chart.encodings.y.length > 0) {
+        setStatus('A series column splits one Y measure. Clear Series before adding another measure.')
+        return current
+      }
       return {
         ...current,
         chart: {
@@ -751,7 +757,13 @@ export function useChartSession({
     })
   }, [])
   const setSeries = useCallback(
-    (column: string | null) => patchEncodings({ series: column }),
+    (column: string | null) => {
+      if (column && liveSpecRef.current.chart.encodings.y.length > 1) {
+        setStatus('A series column splits one Y measure. Remove extra measures before choosing Series.')
+        return
+      }
+      patchEncodings({ series: column })
+    },
     [patchEncodings],
   )
 
@@ -1150,11 +1162,12 @@ export function useChartSession({
 
   // Measured against the sheet as it will be written, per chart, so that a
   // change to one chart leaves the figures of another current.
+  const orphanedFigures = useMemo(() => orphanFigures(figures, sheet.charts.map(chart => chart.id)), [figures, sheet])
   const staleFigures = useMemo(() => {
     if (!figures.length) return []
     const text = serializeSheet(sheet)
-    return findStaleFigures(figures, chartId => figureFingerprint(text, chartId))
-  }, [figures, sheet])
+    return findStaleFigures(figures.filter(figure => !orphanedFigures.includes(figure)), chartId => figureFingerprint(text, chartId))
+  }, [figures, sheet, orphanedFigures])
 
   const rerenderFigures = useCallback(
     async (which?: readonly FigureRecord[]): Promise<number> => {
@@ -1250,6 +1263,7 @@ export function useChartSession({
     exportPng,
     figures,
     staleFigures,
+    orphanedFigures,
     rerenderFigures,
     forgetFigure,
   }

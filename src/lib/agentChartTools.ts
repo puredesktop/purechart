@@ -333,6 +333,9 @@ export function updateChartAgentSpec(
     next.chart.encodings.series = input.series
   }
 
+  if (next.chart.encodings.series && next.chart.encodings.y.length > 1) {
+    throw new AgentChartToolError('A series column splits one measure. Send one y, or series: null to use several measures.')
+  }
   return migrateSpec(next)
 }
 

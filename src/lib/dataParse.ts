@@ -203,7 +203,8 @@ export function delimiterFor(text: string, format: DataFormat): string {
   const header = lines[0] ?? ''
   // Commas are what ".csv" means: keep them unless the header clearly is not
   // comma-separated, and only then accept another separator that holds for
-  // the rows too. A one-column file whose cells hold semicolons keeps them.
+  // the rows too. Quoted one-column cells keep their separators; unquoted
+  // text with the same field count is indistinguishable from delimited data.
   if (delimiterCount(header, ',') > 0) return ','
   const detected = detectDelimiter(text)
   if (detected === ',') return ','

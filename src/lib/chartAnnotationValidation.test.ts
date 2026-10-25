@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateChartAnnotations } from './chartAnnotationValidation'
+import { annotationPoint, validateChartAnnotations } from './chartAnnotationValidation'
 import { computeChartGeometry, type ChartGeometry } from './chartLayout'
 import { facetLayout } from './chartFacet'
 import { defaultSpec, type ChartAnnotation, type ChartSpec } from './chartSpec'
@@ -103,4 +103,15 @@ describe('a range annotation on a faceted chart', () => {
     const annotated: ChartSpec = { ...spec, chart: { ...spec.chart, annotations: [range({ count: summary.count + 1 })] } }
     expect(() => validateChartAnnotations(annotated, geometries)).toThrow(/incorrect count/)
   })
+})
+
+it('does not merge distinct categorical timestamps just because their day agrees', () => {
+  const point = { xLabel: '2024-01-15T08:00:00Z', value: 10 }
+  expect(annotationPoint([point], { xLabel: '2024-01-15T09:00:00Z', value: 10 })).toBeNull()
+  expect(annotationPoint([point], point)).toBe(point)
+})
+
+it('refuses an incorrect exact-category value instead of targeting a matching day', () => {
+  const points = [{ xLabel: '2024-01-15', value: 10 }, { xLabel: '2024-01-15T08:00:00Z', value: 20 }]
+  expect(annotationPoint(points, { xLabel: '2024-01-15T08:00:00Z', value: 10 })).toBeNull()
 })

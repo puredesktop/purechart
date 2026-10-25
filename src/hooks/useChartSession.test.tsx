@@ -1,4 +1,6 @@
 import { act } from 'react'
+import { ExportPanel } from '../components/ExportPanel'
+import { ControlsPanel } from '../components/ControlsPanel'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 const { read, write, binaryWrite } = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn(), binaryWrite: vi.fn() }))
@@ -382,4 +384,64 @@ it('does not let a delayed external reload overwrite edits made while reading', 
   await act(async () => { resolve(JSON.stringify(defaultSpec('External copy'))); await loading })
   expect(session.spec.title).toBe('My new edit')
   expect(session.canUndo).toBe(true)
+})
+
+it('keeps UI mapping changes valid in both directions', async () => {
+  await mountSession()
+  await act(async () => { session.setPastedText('day,region,sales,cost\nMon,A,10,5\nTue,B,20,8') })
+  await act(async () => { session.setY('sales'); session.addY('cost') })
+  await act(async () => { session.setSeries('region') })
+  expect(session.spec.chart.encodings.y).toEqual(['sales', 'cost'])
+  expect(session.spec.chart.encodings.series).toBeNull()
+  expect(session.status).toContain('one Y')
+  const host = document.createElement('div')
+  const controlsRoot = createRoot(host)
+  const showControls = async () => {
+    await act(async () => { controlsRoot.render(<ControlsPanel session={session} table={session.table} section="chart" expanded interactionMode="read" onInteractionModeChange={() => {}} onResetInteraction={() => {}} />) })
+  }
+  await showControls()
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Series"]')!.disabled).toBe(true)
+  expect(host.textContent).toContain('Choose one Y measure')
+  await act(async () => { session.removeY('cost') })
+  await act(async () => { session.setSeries('region') })
+  await act(async () => { session.addY('cost') })
+  expect(session.spec.chart.encodings.y).toEqual(['sales'])
+  expect(session.spec.chart.encodings.series).toBe('region')
+  expect(session.status).toContain('one Y')
+  try {
+    await showControls()
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="Add Y measure"]')!.disabled).toBe(true)
+    expect(host.textContent).toContain('Clear Series to add another measure')
+  } finally {
+    await act(async () => { controlsRoot.unmount() })
+  }
+})
+
+it('separates removed source figures from stale figures and lets users forget them', async () => {
+  const spec = defaultSpec('Figures')
+  const sheet = migrateSheet(spec)
+  const liveId = sheet.charts[0].id
+  const figure = { collectionPath: '/report.book', relativePath: 'assets/figures/gone.svg', chartId: 'removed', format: 'svg', width: 900, height: 540, scale: 1, transparent: false, palette: 'source', fingerprint: 'old', exportedAt: '' }
+  read.mockImplementation((path: string) => Promise.resolve(path.endsWith('figures.json') ? JSON.stringify({ figures: [figure, { ...figure, chartId: liveId, relativePath: 'assets/figures/live.svg' }] }) : serializeSheet(sheet)))
+  await mountSession()
+  await act(async () => { await session.openChartPath('/figures.chart') })
+  expect(session.staleFigures.map(f => f.chartId)).toEqual([liveId])
+  expect(session.orphanedFigures.map(f => f.chartId)).toEqual(['removed'])
+  const host = document.createElement('div')
+  const panelRoot = createRoot(host)
+  try {
+    await act(async () => { panelRoot.render(<ExportPanel session={session} />) })
+    const orphanRow = Array.from(host.querySelectorAll('li')).find(li => li.textContent?.includes('gone.svg'))!
+    expect(orphanRow.textContent).toContain('source chart removed')
+    expect(orphanRow.textContent).toContain('Forget')
+    expect(orphanRow.textContent).not.toContain('Redraw')
+    expect(host.textContent).toContain('Redraw the figure that is behind')
+  } finally {
+    await act(async () => { panelRoot.unmount() })
+  }
+  await act(async () => { await session.forgetFigure(session.orphanedFigures[0]) })
+  expect(session.orphanedFigures).toEqual([])
+  expect(session.figures).toHaveLength(1)
+  const savedFigures = JSON.parse(write.mock.calls.at(-1)![1]).figures
+  expect(savedFigures.map((f: { chartId: string }) => f.chartId)).toEqual([liveId])
 })

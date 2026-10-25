@@ -1,4 +1,4 @@
-import { csvFormatRows, dsvFormat } from 'd3'
+import { dsvFormat } from 'd3'
 import { delimiterFor, detectDelimiter, parseTable, type ColumnType, type DataFormat, type DataTable } from './dataParse'
 import type { ChartSheet } from './chartSheet'
 
@@ -90,7 +90,9 @@ export function editSheetData(sheet: ChartSheet, table: DataTable, edit: DataEdi
     if (edit.kind === 'rename' && columnTypes[name]) columnTypes[next.columns[edit.column]] = columnTypes[name]
     delete columnTypes[name]
   }
-  const text = [next.columns, ...next.rows].map(row => csvFormatRows([row]) || '""').join('\n')
+  // Quote every separator the importer sniffs, even in a one-column CSV.
+  const csvCell = (cell: string) => /[,;|\t"\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
+  const text = [next.columns, ...next.rows].map(row => row.map(csvCell).join(',') || '""').join('\n')
   let charts = sheet.charts
   if (edit.kind === 'rename' || edit.kind === 'remove-column') {
     const old = grid.columns[edit.column]

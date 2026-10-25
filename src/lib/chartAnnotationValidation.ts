@@ -16,17 +16,21 @@ function dayOf(label: string): string | null {
   return DAY_LABEL.exec(label)?.[1] ?? null
 }
 
-/** A day and a timestamp on that day name the same drawn mark; days differ exactly. */
-function sameXLabel(a: string, b: string): boolean {
-  if (a === b) return true
-  const day = dayOf(a)
-  return day !== null && day === dayOf(b)
+/** Resolve exact categories first, then the day used to draw a date column. */
+export function annotationPoint<T extends { xLabel: string; value: number }>(
+  points: readonly T[],
+  target: { xLabel: string; value: number },
+): T | null {
+  const label = points.some(point => point.xLabel === target.xLabel)
+    ? target.xLabel
+    : dayOf(target.xLabel)
+  return points.find(point => point.xLabel === label && point.value === target.value) ?? null
 }
 
-function xPixelFor(geometry: ChartGeometry, label: string): number | null {
+/** Shared by validation and drawing, including exports and already saved notes. */
+export function annotationXPixel(geometry: ChartGeometry, label: string): number | null {
   const exact = geometry.xPixelForLabel(label)
   if (exact !== null) return exact
-  // A timestamp whose day is the drawn category still lands on that category.
   const day = dayOf(label)
   return day === null ? null : geometry.xPixelForLabel(day)
 }
@@ -38,7 +42,7 @@ export function validateChartAnnotations(
   for (const annotation of spec.chart.annotations) {
     const target = annotation.target
     if (target.kind === 'point') {
-      if (!geometries.some(g => g.series.some(s => s.key === target.seriesKey && s.points.some(p => sameXLabel(p.xLabel, target.xLabel) && p.value === target.value)))) {
+      if (!geometries.some(g => g.series.some(s => s.key === target.seriesKey && annotationPoint(s.points, target) !== null))) {
         throw new Error(`Annotation “${annotation.text}” does not target a plotted point. Update or remove it.`)
       }
     } else {
@@ -48,8 +52,8 @@ export function validateChartAnnotations(
       // impossible on any faceted chart.
       const points = geometries
         .flatMap(g => {
-          const from = xPixelFor(g, target.x.from)
-          const to = xPixelFor(g, target.x.to)
+          const from = annotationXPixel(g, target.x.from)
+          const to = annotationXPixel(g, target.x.to)
           if (from === null || to === null) return []
           return g.series.flatMap(series => series.points).filter(p => p.cx >= Math.min(from, to) && p.cx <= Math.max(from, to) && p.value >= target.y.from && p.value <= target.y.to)
         })
