@@ -192,3 +192,11 @@ describe('agentChartTools', () => {
     })
   })
 })
+
+it('rejects a series split over several measures before migration can discard a measure', () => {
+  const { spec, table } = createChartAgentSpec({ dataText: 'region,north,south\nA,1,2\nB,3,4' })
+  expect(() => updateChartAgentSpec(spec, table, { y: ['north', 'south'], series: 'region' })).toThrow(/one y.*series: null/)
+  const split = updateChartAgentSpec(spec, table, { y: ['north'], series: 'region' })
+  expect(() => updateChartAgentSpec(split, table, { y: ['north', 'south'] })).toThrow(/one y.*series: null/)
+  expect(updateChartAgentSpec(split, table, { y: ['north', 'south'], series: null }).chart.encodings.y).toEqual(['north', 'south'])
+})

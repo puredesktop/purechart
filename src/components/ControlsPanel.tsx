@@ -342,7 +342,7 @@ export function ControlsPanel({
           label="Add Y measure"
           value={null}
           options={availableYColumns}
-          disabled={disabled}
+          disabled={disabled || (!!encodings.series && encodings.y.length > 0)}
           placeholder={
             encodings.y.length > 0 ? 'Add another measure' : 'Choose measure'
           }
@@ -371,9 +371,14 @@ export function ControlsPanel({
           label="Series"
           value={encodings.series ?? NONE_ID}
           options={seriesColumns}
-          disabled={disabled}
+          disabled={disabled || encodings.y.length > 1}
           onChange={id => session.setSeries(id === NONE_ID ? null : id)}
         />
+        {encodings.series ? (
+          <StyledHint>A series column splits one Y measure. Clear Series to add another measure.</StyledHint>
+        ) : encodings.y.length > 1 ? (
+          <StyledHint>Choose one Y measure to split it by Series.</StyledHint>
+        ) : null}
       </StyledSection>
 
       <StyledSection>

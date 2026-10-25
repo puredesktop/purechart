@@ -3,6 +3,7 @@ import type { ChartTransform } from '../lib/chartTransform'
 import { editSheetData, type DataEdit } from '../lib/dataEditing'
 import { ChartHistory } from '../lib/chartHistory'
 import { applyForm, suggestForms } from '../lib/chartForms'
+import { paletteCapacity } from '../lib/chartTheme'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { registerPlatformAppObject } from '@purescience/platform-ui/bridge/documents'
 import { CHART_APP_SLUG } from '../constants'
@@ -21,6 +22,7 @@ import {
   figureFingerprint,
   figureSourcePath,
   forgetFigure as forgetFigureRecord,
+  orphanFigures,
   parseFigures,
   recordFigure,
   serializeFigures,
@@ -216,6 +218,8 @@ export interface ChartSession {
   figures: FigureRecord[]
   /** The ones drawn before the chart last changed. */
   staleFigures: FigureRecord[]
+  /** Figures whose source chart was removed; only forgetting is available. */
+  orphanedFigures: FigureRecord[]
   /** Redraw figures in place — the stale ones unless told which. Resolves with how many were redrawn. */
   rerenderFigures: (figures?: readonly FigureRecord[]) => Promise<number>
   /** Stop tracking a figure that was removed from its collection. */
@@ -642,7 +646,9 @@ export function useChartSession({
         const stillFits =
           has(enc.x) && enc.y.every(name => has(name)) && has(enc.series)
         if (options?.resetChart || !enc.x || !enc.y.length || !stillFits) {
-          const candidate = suggestForms(nextTable).find(form => form.supported)
+          const candidate = suggestForms(nextTable, {
+            paletteCapacity: paletteCapacity(current.chart.style.palette, current.chart.style.customPalettes),
+          }).find(form => form.supported)
           next.chart = candidate
             ? applyForm(next, candidate).chart
             : { ...current.chart, type: 'line', encodings: suggestEncodings(nextTable) }
@@ -719,6 +725,10 @@ export function useChartSession({
   const addY = useCallback((column: string) => {
     updateSpec(current => {
       if (current.chart.encodings.y.includes(column)) return current
+      if (current.chart.encodings.series && current.chart.encodings.y.length > 0) {
+        setStatus('A series column splits one Y measure. Clear Series before adding another measure.')
+        return current
+      }
       return {
         ...current,
         chart: {
@@ -747,7 +757,13 @@ export function useChartSession({
     })
   }, [])
   const setSeries = useCallback(
-    (column: string | null) => patchEncodings({ series: column }),
+    (column: string | null) => {
+      if (column && liveSpecRef.current.chart.encodings.y.length > 1) {
+        setStatus('A series column splits one Y measure. Remove extra measures before choosing Series.')
+        return
+      }
+      patchEncodings({ series: column })
+    },
     [patchEncodings],
   )
 
@@ -1152,15 +1168,21 @@ export function useChartSession({
 
   // Measured against the sheet as it will be written, per chart, so that a
   // change to one chart leaves the figures of another current.
+  const orphanedFigures = useMemo(() => orphanFigures(figures, sheet.charts.map(chart => chart.id)), [figures, sheet])
   const staleFigures = useMemo(() => {
     if (!figures.length) return []
     const text = serializeSheet(sheet)
-    return findStaleFigures(figures, chartId => figureFingerprint(text, chartId))
-  }, [figures, sheet])
+    return findStaleFigures(figures.filter(figure => !orphanedFigures.includes(figure)), chartId => figureFingerprint(text, chartId))
+  }, [figures, sheet, orphanedFigures])
 
   const rerenderFigures = useCallback(
     async (which?: readonly FigureRecord[]): Promise<number> => {
-      const list = which ?? staleFigures
+      const requested = which ?? staleFigures
+      // A figure whose chart has been removed cannot be redrawn in place:
+      // there is no chart to draw it from, and falling back to the first one
+      // put a different picture in somebody's chapter.
+      const orphans = orphanFigures(requested, liveSheetRef.current.charts.map(chart => chart.id))
+      const list = requested.filter(figure => !orphans.includes(figure))
       let redrawn = 0
       for (const figure of list) {
         const options: ChartExportOptions = {
@@ -1176,7 +1198,9 @@ export function useChartSession({
         const result = figure.format === 'png' ? await exportPng(null, options) : await exportSvg(null, options)
         if (result?.kind === 'file') redrawn += 1
       }
-      if (list.length) setStatus(redrawn === list.length ? `Redrew ${redrawn} ${redrawn === 1 ? 'figure' : 'figures'} in place` : `Redrew ${redrawn} of ${list.length} figures; the rest reported errors`)
+      const skipped = orphans.length ? ` ${orphans.length} ${orphans.length === 1 ? 'figure' : 'figures'} left alone: the chart ${orphans.length === 1 ? 'it was' : 'they were'} drawn from is no longer on the sheet.` : ''
+      if (list.length) setStatus((redrawn === list.length ? `Redrew ${redrawn} ${redrawn === 1 ? 'figure' : 'figures'} in place` : `Redrew ${redrawn} of ${list.length} figures; the rest reported errors`) + skipped)
+      else if (orphans.length) setStatus(`Nothing redrawn.${skipped}`)
       return redrawn
     },
     [exportPng, exportSvg, staleFigures],
@@ -1245,6 +1269,7 @@ export function useChartSession({
     exportPng,
     figures,
     staleFigures,
+    orphanedFigures,
     rerenderFigures,
     forgetFigure,
   }

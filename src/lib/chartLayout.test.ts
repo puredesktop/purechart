@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { computeChartGeometry } from './chartLayout'
 import { validateChartAnnotations } from './chartAnnotationValidation'
 import { defaultSpec, type ChartSpec } from './chartSpec'
-import type { DataTable } from './dataParse'
+import { parseTable, type DataTable } from './dataParse'
 
 const dims = { width: 600, height: 400 }
 
@@ -455,4 +455,85 @@ describe('computeChartGeometry', () => {
       expect(geometry.series[0]!.points.every(p => !p.xLabel.includes(':'))).toBe(true)
     }
   })
+})
+
+describe('cases that used to draw the wrong thing', () => {
+  it('puts a negative bar’s value at the end of its own bar', () => {
+    const table: DataTable = {
+      columns: [{ name: 'k', type: 'string' }, { name: 'v', type: 'number' }],
+      rows: [{ k: 'A', v: -5 }, { k: 'B', v: -10 }, { k: 'C', v: 3 }],
+    }
+    const geo = computeChartGeometry(
+      table,
+      specWith({ type: 'bar', encodings: { x: 'k', y: ['v'], series: null } }),
+      dims,
+    )
+    const [a, b, c] = geo.series[0]!.bars
+    // Below the bar, not 8px above the zero line where every negative label
+    // used to land on the same row.
+    expect(a!.labelY).toBeGreaterThan(a!.y + a!.height)
+    expect(b!.labelY).toBeGreaterThan(b!.y + b!.height)
+    expect(a!.labelY).not.toBeCloseTo(b!.labelY, 3)
+    // A positive value still sits above its bar.
+    expect(c!.labelY).toBeLessThan(c!.y)
+  })
+
+  it('measures a table too large to spread into Math.min', () => {
+    const table: DataTable = {
+      columns: [{ name: 'x', type: 'number' }, { name: 'y', type: 'number' }],
+      rows: Array.from({ length: 150_000 }, (_, index) => ({ x: index, y: index % 97 })),
+    }
+    const geo = computeChartGeometry(
+      table,
+      specWith({ type: 'line', encodings: { x: 'x', y: ['y'], series: null } }),
+      dims,
+    )
+    expect(geo.empty).toBe(false)
+    expect(geo.yExtent).toEqual([0, 96])
+  })
+
+  it('says so when a series column is asked to split two measures', () => {
+    const table: DataTable = {
+      columns: [
+        { name: 'year', type: 'number' },
+        { name: 'region', type: 'string' },
+        { name: 'a', type: 'number' },
+        { name: 'b', type: 'number' },
+      ],
+      rows: [
+        { year: 2020, region: 'N', a: 1, b: 900 },
+        { year: 2021, region: 'S', a: 2, b: 800 },
+      ],
+    }
+    const geo = computeChartGeometry(
+      table,
+      specWith({ type: 'line', encodings: { x: 'year', y: ['a', 'b'], series: 'region' } }),
+      dims,
+    )
+    // It used to draw `a` alone and say nothing about `b`.
+    expect(geo.empty).toBe(true)
+    expect(geo.message).toMatch(/one Y column/i)
+  })
+})
+
+it('keeps every bar of a grouped bar inside its own category band', () => {
+  const rows: string[] = ['k,region,v']
+  for (const category of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T']) {
+    for (let index = 0; index < 8; index += 1) rows.push(`${category},R${index},${index + 1}`)
+  }
+  const table = parseTable(rows.join('\n'))
+  const geo = computeChartGeometry(
+    table,
+    specWith({ type: 'grouped-bar', encodings: { x: 'k', y: ['v'], series: 'region' } }),
+    dims,
+  )
+  const step = geo.xTicks[1]!.position - geo.xTicks[0]!.position
+  // A fixed 4px gap between bars overflowed the band once the bands were
+  // narrow, so one category's bars sat over the next category's slot.
+  for (let index = 0; index < geo.xTicks.length; index += 1) {
+    const bars = geo.series.map(series => series.bars[index]).filter(bar => !!bar)
+    const left = Math.min(...bars.map(bar => bar!.x))
+    const right = Math.max(...bars.map(bar => bar!.x + bar!.width))
+    expect(right - left).toBeLessThan(step * 0.9)
+  }
 })

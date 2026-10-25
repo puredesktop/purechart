@@ -103,6 +103,23 @@ const MIN_X_TICK_GAP = 72
 const X_TICK_CHAR_WIDTH = 7
 const MIN_TRUNCATED_LABEL_LENGTH = 4
 
+/**
+ * Min and max of a column, without spreading it into an argument list.
+ *
+ * `Math.min(...values)` throws a RangeError once a table is big enough
+ * (around 125k values in V8), which took the whole chart — and the export —
+ * down on large but perfectly ordinary CSVs.
+ */
+export function extentOf(values: readonly number[]): [number, number] {
+  let lo = Infinity
+  let hi = -Infinity
+  for (const value of values) {
+    if (value < lo) lo = value
+    if (value > hi) hi = value
+  }
+  return [lo, hi]
+}
+
 function asNumber(value: CellValue): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
   if (value instanceof Date) return value.getTime()
@@ -310,8 +327,7 @@ export function binSeriesForHistogram(seriesData: SeriesData[], sharedValues?: n
 } {
   const all = sharedValues ?? seriesData.flatMap(series => series.values.map(value => value.y))
   if (all.length === 0) return { series: [], categories: [] }
-  const lo = Math.min(...all)
-  const hi = Math.max(...all)
+  const [lo, hi] = extentOf(all)
   const binCount = Math.max(1, Math.ceil(Math.log2(all.length) + 1))
   const scale = scaleLinear()
     .domain([lo, hi === lo ? lo + 1 : hi])
@@ -519,6 +535,15 @@ export function computeChartGeometry(
       histogram ? 'Choose the column to bin as Y.' : 'Choose a Y column.',
     )
   }
+  // A series column splits ONE measure into one line/bar per value. With two
+  // measures asked for, the second was silently dropped and the chart drew a
+  // different question from the one on the controls.
+  if (encodings.series && encodings.y.length > 1) {
+    return emptyGeometry(
+      dims,
+      'A series column splits one measure. Choose one Y column, or clear the series column.',
+    )
+  }
 
   const xDetail = options.xDateDetail ?? (xCol?.type === 'date' ? dateDetailOf(table.rows.map(row => row[xCol.name])) : 'day')
   const rawSeries = collectSeries(table, spec, xCol, options.seriesSelection)
@@ -562,8 +587,7 @@ export function computeChartGeometry(
   const domainValues = stackTotals ? [...stackTotals, 0] : [...allY, ...errorValues]
 
   // y scale (bars get a zero baseline; lines/scatter hug the data)
-  const dataMin = Math.min(...domainValues)
-  const dataMax = Math.max(...domainValues)
+  const [dataMin, dataMax] = extentOf(domainValues)
   const barLike = isBarLike(type)
   const forced = options.yDomain
   const axisY = spec.chart.axes.y
@@ -650,8 +674,9 @@ export function computeChartGeometry(
       .map(row => asNumber(row[xColumn.name]))
       .filter((n): n is number => n !== null)
     const axisX = spec.chart.axes.x
-    const xLo = axisX.min ?? options.xDomain?.[0] ?? Math.min(...xNums)
-    const xHi = axisX.max ?? options.xDomain?.[1] ?? Math.max(...xNums)
+    const [xMinData, xMaxData] = extentOf(xNums)
+    const xLo = axisX.min ?? options.xDomain?.[0] ?? xMinData
+    const xHi = axisX.max ?? options.xDomain?.[1] ?? xMaxData
     if (xLo > xHi || (xLo === xHi && (axisX.min != null || axisX.max != null))) return emptyGeometry(dims, 'X bounds must increase.')
     if (axisX.scale === 'log' && (xColumn.type !== 'number' || xNums.some(n => n <= 0) || xLo <= 0)) return emptyGeometry(dims, 'Log X requires positive numeric values.')
     if (xColumn.type === 'date') {
@@ -722,12 +747,16 @@ export function computeChartGeometry(
     const bars: BarGeometry[] = []
     const barGap = Math.min(10, bandwidth * 0.12)
     const usableBarWidth = Math.max(0, bandwidth - barGap)
+    // The gap between neighbouring bars shrinks before the bars do. A fixed
+    // 4px gap pushed a grouped bar past the end of its own band on any chart
+    // with a few categories, so bars from one category sat over the next.
+    const slotGap = Math.min(4, usableBarWidth / Math.max(1, seriesCount * 2))
     const groupedBarWidth = barLike
       ? stacked
         ? Math.max(2, usableBarWidth)
         : Math.max(
-            2,
-            (usableBarWidth - Math.max(0, seriesCount - 1) * 4) /
+            0,
+            (usableBarWidth - Math.max(0, seriesCount - 1) * slotGap) /
               seriesCount,
           )
       : 0
@@ -760,7 +789,7 @@ export function computeChartGeometry(
         continue
       }
       const cy = yScale(value.y)
-      const barX = cx + barGap / 2 + slot * (groupedBarWidth + 4)
+      const barX = cx + barGap / 2 + slot * (groupedBarWidth + slotGap)
       const barCenter = barLike ? barX + groupedBarWidth / 2 : cx
       points.push({
         cx: barCenter,
@@ -785,7 +814,14 @@ export function computeChartGeometry(
           height,
           value: value.y,
           labelX: barCenter,
-          labelY: errorBars && value.row ? yScale(asNumber(value.row[errorBars.upper])!) - 8 : y - 8,
+          // A negative bar hangs below the zero line, so its value belongs at
+          // the far end of the bar — not 8px above the baseline, which put
+          // every negative label in the chart at the same height.
+          labelY: errorBars && value.row
+            ? yScale(asNumber(value.row[errorBars.upper])!) - 8
+            : value.y >= 0
+              ? y - 8
+              : y + height + 12,
         })
       }
     }

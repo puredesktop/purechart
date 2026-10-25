@@ -16,7 +16,12 @@ export function sanitizePresentation(value: unknown): ChartPresentation | undefi
 }
 
 export function formatChartNumber(value: number, format: 'plain' | 'grouped' | 'percent' | 'compact' = 'plain'): string {
-  if (format === 'plain') return String(Number(value.toPrecision(6)))
+  // An integer keeps every digit it has: rounding a tick label to six
+  // significant figures labelled 1234567, 1234568 and 1234569 all "1234570".
+  if (format === 'plain') {
+    if (Number.isInteger(value) && Math.abs(value) < Number.MAX_SAFE_INTEGER) return String(value)
+    return String(Number(value.toPrecision(6)))
+  }
   return new Intl.NumberFormat('en', {
     maximumFractionDigits: 2,
     ...(format === 'percent' ? { style: 'percent' as const } : {}),

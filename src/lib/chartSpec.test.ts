@@ -201,3 +201,9 @@ describe('a year column, which arrives as a number', () => {
     expect(encodings.y).toEqual([])
   })
 })
+
+it('loads legacy series splits with the first measure that was historically drawn', () => {
+  const raw = { chart: { encodings: { x: 'day', y: ['sales', 'cost'], series: 'region' } } }
+  expect(migrateSpec(raw).chart.encodings).toMatchObject({ y: ['sales'], series: 'region' })
+  expect(raw.chart.encodings.y).toEqual(['sales', 'cost'])
+})

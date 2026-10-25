@@ -4,6 +4,7 @@ import {
   figureFingerprint,
   figureSourcePath,
   forgetFigure,
+  orphanFigures,
   parseFigures,
   recordFigure,
   sayStale,
@@ -73,5 +74,16 @@ describe('the figures a chart was drawn into', () => {
     expect(text).toContain('render:1200x800:source:svg')
     expect(figureSourcePath('/books/Reef.book', '/books/Reef.book/charts/Catch.chart')).toBe('charts/Catch.chart')
     expect(figureSourcePath('/books/Reef.book', '/charts/Catch.chart')).toBe('/charts/Catch.chart')
+  })
+})
+
+describe('a figure whose chart has left the sheet', () => {
+  it('is named as orphaned rather than redrawn from another chart', () => {
+    const second: FigureRecord = { ...figure, relativePath: 'assets/figures/other.png', chartId: 'c2' }
+    expect(orphanFigures([figure, second], ['c1'])).toEqual([second])
+    expect(orphanFigures([figure], ['c1', 'c2'])).toEqual([])
+    // A figure with no chart id at all belongs to the sheet, so it is not
+    // orphaned by a chart being removed.
+    expect(orphanFigures([{ ...figure, chartId: null }], [])).toEqual([])
   })
 })

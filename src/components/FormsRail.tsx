@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { styled } from 'styled-components'
 import { renderChartSvg } from '../lib/chartRender'
 import { applyForm, suggestForms, type FormCandidate } from '../lib/chartForms'
+import { paletteCapacity } from '../lib/chartTheme'
 import type { ChartSpec } from '../lib/chartSpec'
 import type { DataTable } from '../lib/dataParse'
 import { enterprise } from '../enterpriseLook'
@@ -34,7 +35,11 @@ export function FormsRail({
   onChoose,
   onShowEveryForm,
 }: FormsRailProps): React.ReactElement | null {
-  const candidates = useMemo(() => suggestForms(table), [table])
+  const capacity = useMemo(
+    () => paletteCapacity(spec.chart.style.palette, spec.chart.style.customPalettes),
+    [spec.chart.style.palette, spec.chart.style.customPalettes],
+  )
+  const candidates = useMemo(() => suggestForms(table, { paletteCapacity: capacity }), [table, capacity])
 
   const thumbs = useMemo(
     () =>

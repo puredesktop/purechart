@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { computeChartGeometry } from '../lib/chartLayout'
 import { defaultSpec, suggestEncodings } from '../lib/chartSpec'
+import { validateChartAnnotations } from '../lib/chartAnnotationValidation'
+import { renderChartSvg } from '../lib/chartRender'
 import { parseDelimited } from '../lib/dataParse'
 import { ChartCanvas } from './ChartCanvas'
 
@@ -50,6 +52,17 @@ describe('ChartCanvas', () => {
     expect(svg).toContain('>north<')
     expect(svg).toContain('>south<')
     expect(svg).toContain('North vs South')
+  })
+
+  it('draws a line chart of one row as a point, not as nothing', () => {
+    const table = parseDelimited('year,north\n2023,24\n')
+    const spec = defaultSpec('One year')
+    spec.chart.type = 'line'
+    spec.chart.encodings = { x: 'year', y: ['north'], series: null }
+    const geometry = computeChartGeometry(table, spec, dims)
+    expect(geometry.series[0]!.linePath).toBeNull()
+    // A single point has no line to draw, and it used to draw no mark at all.
+    expect(renderChart(geometry, spec)).toContain('<circle')
   })
 
   it('renders a bar chart with one rect per category', () => {
@@ -216,4 +229,34 @@ it('wraps long direct labels and preserves their full accessible text', () => {
   expect(doc.querySelector('[data-direct-label] title')?.textContent).toBe(column)
   expect(doc.querySelectorAll('[data-direct-label] tspan').length).toBeGreaterThan(1)
   expect(dims.width - geometry.plot.right).toBeGreaterThan(88)
+})
+
+it('draws validated timestamp point and range notes on screen and in exports', () => {
+  const table = parseDelimited('day,count\n2024-01-15,10\n2024-01-16,20')
+  const spec = defaultSpec('Daily')
+  spec.chart.encodings = { x: 'day', y: ['count'], series: null }
+  spec.chart.annotations = [
+    { id: 'point', text: 'Date point note', createdAt: '', target: { kind: 'point', seriesKey: 'count', xLabel: '2024-01-15T00:00:00.000Z', value: 10 } },
+    { id: 'range', text: 'Date range note', createdAt: '', target: { kind: 'range', x: { from: '2024-01-15T00:00:00.000Z', to: '2024-01-16T00:00:00.000Z' }, y: { from: 10, to: 20 }, summary: { count: 2, min: 10, max: 20, average: 15, change: 10 } } },
+  ]
+  const geometry = computeChartGeometry(table, spec, dims)
+  expect(() => validateChartAnnotations(spec, [geometry])).not.toThrow()
+  for (const svg of [renderChart(geometry, spec), renderChartSvg(table, spec, dims).svg]) {
+    expect(svg).toContain('Date point note')
+    expect(svg).toContain('Date range note')
+  }
+})
+
+it('anchors to the exact timestamp category before falling back to a day', () => {
+  const table = parseDelimited('label,count\n2024-01-15,10\n2024-01-15T08:00:00Z,10', ',', { label: 'string' })
+  const spec = defaultSpec('Timestamp categories')
+  spec.chart.encodings = { x: 'label', y: ['count'], series: null }
+  spec.chart.annotations = [{ id: 'exact', text: 'Exact category', createdAt: '', target: { kind: 'point', seriesKey: 'count', xLabel: '2024-01-15T08:00:00Z', value: 10 } }]
+  const geometry = computeChartGeometry(table, spec, dims)
+  expect(() => validateChartAnnotations(spec, [geometry])).not.toThrow()
+  for (const svg of [renderChart(geometry, spec), renderChartSvg(table, spec, dims).svg]) {
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    const label = Array.from(doc.querySelectorAll('text')).find(node => node.textContent === 'Exact category')!
+    expect(Number(label.parentElement!.querySelector('circle')!.getAttribute('cx'))).toBe(geometry.series[0].points[1].cx)
+  }
 })

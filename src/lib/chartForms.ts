@@ -1,5 +1,6 @@
 import { facetValues } from './chartFacet'
 import type { ChartEncodings, ChartSpec, ChartType } from './chartSpec'
+import { CHART_PALETTES } from './chartTheme'
 import { axisColumns, type DataTable } from './dataParse'
 
 /**
@@ -60,9 +61,16 @@ function readShape(table: DataTable): Shape {
  * most impressive drawing: a date column and one measure is a question about
  * change over time, and nothing else on the list answers that as well.
  */
-export function suggestForms(table: DataTable): FormCandidate[] {
+export function suggestForms(
+  table: DataTable,
+  options: { paletteCapacity?: number } = {},
+): FormCandidate[] {
   const shape = readShape(table)
   if (table.columns.length === 0) return []
+  // Past the palette's capacity a series split cannot be drawn honestly, so
+  // it must not be the form a freshly opened CSV is given: the review would
+  // block the chart the app had just chosen.
+  const capacity = options.paletteCapacity ?? CHART_PALETTES.science.colors.length
 
   const time = shape.dates[0] ?? null
   const measure = shape.numerics[0] ?? null
@@ -80,17 +88,20 @@ export function suggestForms(table: DataTable): FormCandidate[] {
     series: string | null,
   ): ChartEncodings => ({ x, y, series })
 
+  const splitTooWide = split !== null && split.values > capacity
   if (time && measure) {
     add({
       type: 'line',
       job: split ? `How each ${singular(split.name)} moved` : 'How it moved',
       because: split
-        ? `${time} runs in order, one measure follows it, and ${split.name} has ${split.values} values to follow separately.`
+        ? splitTooWide
+          ? `${time} runs in order and ${split.name} has ${split.values} values to follow — more than one palette can keep apart, so the panels below carry it more honestly.`
+          : `${time} runs in order, one measure follows it, and ${split.name} has ${split.values} values to follow separately.`
         : `${time} runs in order and there is a measure to follow along it: change is what this table is about.`,
       encodings: encodings(time, [measure], split?.name ?? null),
       facet: null,
       supported: true,
-      rank: 100,
+      rank: splitTooWide ? 75 : 100,
     })
   }
 

@@ -33,7 +33,17 @@ export async function addChartAnnotationHandler(
   const spec = addChartAgentAnnotationSpec(context.spec, annotation)
   const dims = { width: 900, height: 540 }
   const facets = facetLayout(context.table, spec, dims)
-  validateChartAnnotations(spec, facets ? facets.panels.map(p => p.geometry) : [computeChartGeometry(context.table, spec, dims)])
+  // Only the annotation being added is checked. A target left behind by an
+  // earlier version of the data used to fail every later addition, with no
+  // way to remove just that one note.
+  const geometries =
+    facets && facets.panels.length > 0
+      ? facets.panels.map(p => p.geometry)
+      : [computeChartGeometry(context.table, spec, dims)]
+  validateChartAnnotations(
+    { ...spec, chart: { ...spec.chart, annotations: [annotation] } },
+    geometries,
+  )
   context.applyChartSpec(spec, {
     table: context.table,
     status: 'Annotation saved',

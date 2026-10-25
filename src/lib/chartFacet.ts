@@ -1,5 +1,5 @@
 import { transformChartData } from './chartTransform'
-import { chartSeriesSelection, computeChartGeometry, dateCategoryLabel, dateDetailOf, type ChartDims, type ChartGeometry } from './chartLayout'
+import { chartSeriesSelection, computeChartGeometry, dateCategoryLabel, dateDetailOf, extentOf, type ChartDims, type ChartGeometry } from './chartLayout'
 import type { ChartSpec } from './chartSpec'
 import type { DataTable } from './dataParse'
 
@@ -115,6 +115,11 @@ export function facetLayout(
     },
   }
 
+  // A series column splits one measure; with two measures asked for, the
+  // single chart already says so, and repeating it in every panel says it
+  // once per panel instead of once.
+  if (panelSpec.chart.encodings.series && panelSpec.chart.encodings.y.length > 1) return null
+
   const columns = facetColumns(values.length, spec.chart.facet.columns, dims.width)
   const rows = Math.ceil(values.length / columns)
   const panelWidth = (dims.width - GAP * (columns - 1)) / columns
@@ -140,7 +145,7 @@ export function facetLayout(
   const sharedOptions = {
     compact: options.compact, xCategories, xDateDetail, histogramValues,
     seriesSelection: chartSeriesSelection(table, panelSpec),
-    ...(numbers.length ? { xDomain: [Math.min(...numbers), Math.max(...numbers)] as [number, number] } : {}),
+    ...(numbers.length ? { xDomain: extentOf(numbers) } : {}),
   }
 
   // Measure every panel first; the scale belongs to the whole, not the panel.
@@ -154,8 +159,8 @@ export function facetLayout(
   // Rejected log panels return [0, 0], not a usable scale extent. Keep their
   // refusal local rather than letting that placeholder invalidate every panel.
   const yDomain: [number, number] = extents.length ? [
-    Math.min(...extents.map(extent => extent[0])),
-    Math.max(...extents.map(extent => extent[1])),
+    extentOf(extents.map(extent => extent[0]))[0],
+    extentOf(extents.map(extent => extent[1]))[1],
   ] : [1, 10]
 
   const measured = subsets.map(entry => {

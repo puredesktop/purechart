@@ -89,6 +89,7 @@ function changeSentence(series: SeriesPoints): {
   text: string
   working: string
   magnitude: number
+  delta: number
 } | null {
   const first = series.points[0]!
   const last = series.points[series.points.length - 1]!
@@ -99,6 +100,7 @@ function changeSentence(series: SeriesPoints): {
       text: `${series.key} ends where it started, at ${round(first.value)}.`,
       working: `${first.label} ${round(first.value)} · ${last.label} ${round(last.value)}`,
       magnitude: 0,
+      delta,
     }
   }
   const word = multipleWord(first.value, last.value)
@@ -109,7 +111,14 @@ function changeSentence(series: SeriesPoints): {
   return {
     text,
     working: `${round(delta > 0 ? delta : -delta)} ${delta > 0 ? 'higher' : 'lower'}${first.value > 0 ? `, ×${(last.value / first.value).toFixed(1)}` : ''}`,
-    magnitude: first.value > 0 ? last.value / first.value : Math.abs(delta),
+    // A move is compared with its own starting size, never as a ratio beside
+    // a raw count. A series that starts at zero has no multiple, so it is not
+    // ranked as one: it used to win on `|Δ|` against every real doubling.
+    magnitude:
+      first.value === 0
+        ? 0
+        : Math.abs(delta) / Math.abs(first.value),
+    delta,
   }
 }
 
@@ -157,20 +166,32 @@ function largestJump(entry: SeriesPoints): {
   return best && best.delta > 0 ? { ...best, runnerUp } : null
 }
 
-/** Whether the series ever change places. */
-function crossings(series: SeriesPoints[]): number {
-  if (series.length < 2) return 0
-  const length = Math.min(...series.map(entry => entry.points.length))
+/** Whether the series ever change places, comparing each one by x position. */
+function crossings(series: SeriesPoints[]): { changes: number; positions: number } {
+  if (series.length < 2) return { changes: 0, positions: 0 }
+  // Comparing by array index lined up one series' January with another's
+  // February whenever a series was missing a category — inventing crossings,
+  // and hiding real ones. Only the labels every series shares are compared.
+  const byLabel = series.map(
+    entry => new Map(entry.points.map(point => [point.label, point.value])),
+  )
+  const shared = series[0]!.points
+    .map(point => point.label)
+    .filter(label => byLabel.every(values => values.has(label)))
   let changes = 0
   let previous: string[] | null = null
-  for (let index = 0; index < length; index += 1) {
-    const order = [...series]
-      .sort((a, b) => b.points[index]!.value - a.points[index]!.value)
+  for (const label of shared) {
+    const order = series
+      .map((entry, index) => ({
+        key: entry.key,
+        value: byLabel[index]!.get(label)!,
+      }))
+      .sort((a, b) => b.value - a.value)
       .map(entry => entry.key)
     if (previous && order.join('|') !== previous.join('|')) changes += 1
     previous = order
   }
-  return changes
+  return { changes, positions: shared.length }
 }
 
 export function chartFindings(
@@ -198,12 +219,20 @@ export function chartFindings(
 
   const biggest = changes[0]
   if (biggest) {
+    // "Steepest rise" has to match the direction of the move it names, and a
+    // superlative only holds when the winner stands clear of the next one.
+    const runnerUp = changes[1]?.change.magnitude ?? 0
+    const leader = changes.length > 1 && biggest.change.magnitude > runnerUp
+    const qualifier = leader
+      ? biggest.change.delta > 0
+        ? ` — the steepest rise of the ${series.length}.`
+        : ` — the steepest fall of the ${series.length}.`
+      : ''
     findings.push({
       id: 'biggest-move',
-      text:
-        series.length > 1
-          ? `${biggest.change.text.replace(/\.$/, '')} — the steepest rise of the ${series.length}.`
-          : biggest.change.text,
+      text: qualifier
+        ? `${biggest.change.text.replace(/\.$/, '')}${qualifier}`
+        : biggest.change.text,
       working: biggest.change.working,
       series: biggest.entry.key,
     })
@@ -260,20 +289,19 @@ export function chartFindings(
 
   // Whether the ranking ever changes is often the whole story.
   if (series.length > 1) {
-    const changed = crossings(series)
-    const length = Math.min(...series.map(entry => entry.points.length))
+    const { changes: changed, positions } = crossings(series)
     findings.push(
       changed === 0
         ? {
             id: 'no-crossing',
             text: `The ${series.length} series never change places.`,
-            working: `same order at all ${length} positions`,
+            working: `same order at all ${positions} positions`,
             series: null,
           }
         : {
             id: 'crossing',
             text: `The order changes ${changed === 1 ? 'once' : `${changed} times`} across the chart.`,
-            working: `${length} positions compared`,
+            working: `${positions} positions compared`,
             series: null,
           },
     )

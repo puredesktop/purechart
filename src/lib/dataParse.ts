@@ -28,20 +28,26 @@ const DATE_RE = /^\d{4}[-/]\d{1,2}([-/]\d{1,2})?([ T][\d:.]+.*)?$/
 
 export const EMPTY_TABLE: DataTable = { columns: [], rows: [] }
 
+/** Fields a delimiter would produce on one line, respecting quotes. */
+function delimiterCount(line: string, candidate: string): number {
+  let count = 0
+  let quoted = false
+  for (let index = 0; index < line.length; index += 1) {
+    if (line[index] === '"') {
+      if (quoted && line[index + 1] === '"') index += 1
+      else quoted = !quoted
+    } else if (!quoted && line[index] === candidate) count += 1
+  }
+  return count
+}
+
 /** Pick the delimiter that splits the first non-empty line into the most fields. */
 export function detectDelimiter(text: string): string {
   const line = text.split(/\r?\n/).find(value => value.trim().length > 0) ?? ''
   let best = ','
   let bestCount = 0
   for (const candidate of DELIMITER_CANDIDATES) {
-    let count = 0
-    let quoted = false
-    for (let index = 0; index < line.length; index += 1) {
-      if (line[index] === '"') {
-        if (quoted && line[index + 1] === '"') index += 1
-        else quoted = !quoted
-      } else if (!quoted && line[index] === candidate) count += 1
-    }
+    const count = delimiterCount(line, candidate)
     if (count > bestCount) {
       bestCount = count
       best = candidate
@@ -181,8 +187,31 @@ export function parseJsonData(text: string, overrides: ColumnTypes = {}): DataTa
 
 export function parseData(text: string, format: DataFormat, types: ColumnTypes = {}): DataTable {
   if (format === 'json') return parseJsonData(text, types)
-  if (format === 'tsv') return parseDelimited(text, '\t', types)
-  return parseDelimited(text, ',', types)
+  return parseDelimited(text, delimiterFor(text, format), types)
+}
+
+/**
+ * The separator a format implies.
+ *
+ * A tab is a tab, but a file called `.csv` may still be separated by
+ * semicolons — and reading it as comma left the whole file in one column,
+ * while the data grid (which sniffs) showed several. One rule for both keeps
+ * the table and the editor looking at the same fields.
+ */
+export function delimiterFor(text: string, format: DataFormat): string {
+  if (format === 'tsv') return '\t'
+  const lines = text.split(/\r?\n/).filter(value => value.trim().length > 0)
+  const header = lines[0] ?? ''
+  // Commas are what ".csv" means: keep them unless the header clearly is not
+  // comma-separated, and only then accept another separator that holds for
+  // the rows too. Quoted one-column cells keep their separators; unquoted
+  // text with the same field count is indistinguishable from delimited data.
+  if (delimiterCount(header, ',') > 0) return ','
+  const detected = detectDelimiter(text)
+  if (detected === ',') return ','
+  const expected = delimiterCount(header, detected)
+  const holds = lines.slice(0, 20).every(line => delimiterCount(line, detected) === expected)
+  return holds ? detected : ','
 }
 
 /** Best-effort parse of arbitrary pasted/loaded text: JSON when it looks like JSON, else delimited. */

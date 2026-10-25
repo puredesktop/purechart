@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { defaultSpec, migrateSpec } from './chartSpec'
-import { defaultPresentation } from './chartPresentation'
+import { defaultPresentation, formatChartNumber } from './chartPresentation'
 import { parseTable } from './dataParse'
 import { computeChartGeometry } from './chartLayout'
 import { renderChartSvg } from './chartRender'
@@ -93,4 +93,13 @@ it('draws intervals above bars within the same zoom transform', () => {
   expect(group.querySelector('rect')).not.toBeNull()
   expect(group.innerHTML.indexOf('<rect')).toBeLessThan(group.innerHTML.indexOf('Error interval'))
   expect(group.parentElement!.getAttribute('transform')).toContain('scale(1)')
+})
+
+it('keeps seven-digit tick values apart instead of rounding them together', () => {
+  // Six significant figures used to label 1234567, 1234568 and 1234569 all
+  // as "1234570", so a large axis had five ticks reading the same number.
+  expect(formatChartNumber(1234567)).toBe('1234567')
+  expect(formatChartNumber(1234568)).toBe('1234568')
+  expect(formatChartNumber(0.123456789)).toBe('0.123457')
+  expect(formatChartNumber(1234567, 'grouped')).toBe('1,234,567')
 })

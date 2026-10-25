@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { styled } from 'styled-components'
 import { dataGrid, type DataEdit } from '../lib/dataEditing'
 import { SelectField } from './SelectField'
-import type { ColumnTypes, ColumnType, DataTable } from '../lib/dataParse'
+import type { ColumnTypes, ColumnType, DataFormat, DataTable } from '../lib/dataParse'
 import { enterprise } from '../enterpriseLook'
 import { columnRefs } from '../lib/agentRefs'
 
@@ -22,8 +22,8 @@ function Cell({ value, label, onCommit, onPaste, issue }: { issue?: string; valu
     onPaste={onPaste} />
 }
 
-export function DataGridEditor({ table, sourceText, onEdit, columnTypes = {} }: { columnTypes?: ColumnTypes; table: DataTable; sourceText: string; onEdit: (edit: DataEdit) => void }) {
-  const grid = useMemo(() => dataGrid(sourceText, table), [sourceText, table])
+export function DataGridEditor({ table, sourceText, onEdit, columnTypes = {}, format }: { columnTypes?: ColumnTypes; table: DataTable; sourceText: string; format?: DataFormat; onEdit: (edit: DataEdit) => void }) {
+  const grid = useMemo(() => dataGrid(sourceText, table, format), [sourceText, table, format])
   const issues = useMemo(() => new Map(table.issues?.map(issue => [JSON.stringify([issue.row, issue.column]), issue.message])), [table.issues])
   const [scrollTop, setScrollTop] = useState(0)
   const start = Math.min(Math.max(0, grid.rows.length - WINDOW_ROWS), Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - 4))

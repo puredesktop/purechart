@@ -218,3 +218,14 @@ it('chooses the same retained series globally when folding each panel into Other
   for (const panel of layout.panels) expect(panel.geometry.series.map(s => s.key)).toEqual(['alpha', 'Other'])
   expect(layout.panels.find(p => p.value === 'Two')!.geometry.series[1].points[0].value).toBe(50)
 })
+
+it('leaves a series split beside two measures to the single chart, which says why', () => {
+  const table = parseTable(
+    'm,r,region,a,b\n2026-01,X,N,1,2\n2026-02,Y,S,3,4\n2026-01,X,S,5,6',
+  )
+  const spec = defaultSpec('Split')
+  spec.chart.encodings = { x: 'm', y: ['a', 'b'], series: 'region', limitSeries: 0 }
+  spec.chart.facet = { column: 'r', columns: 0 }
+  // One message on the chart beats the same message repeated in every panel.
+  expect(facetLayout(table, spec, { width: 900, height: 540 })).toBeNull()
+})

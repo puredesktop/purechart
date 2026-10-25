@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useId, useMemo, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, WheelEvent } from 'react'
+import { annotationXPixel, annotationPoint } from '../lib/chartAnnotationValidation'
 import type { ChartGeometry } from '../lib/chartLayout'
 import type { ChartAnnotation, ChartSpec } from '../lib/chartSpec'
 import {
@@ -295,12 +296,9 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
     ): InteractivePoint | null {
       const target = annotation.target
       if (target.kind !== 'point') return null
-      return (
-        interactivePoints.find(
-          point =>
-            point.seriesKey === target.seriesKey &&
-            point.xLabel === target.xLabel,
-        ) ?? null
+      return annotationPoint(
+        interactivePoints.filter(point => point.seriesKey === target.seriesKey),
+        target,
       )
     }
 
@@ -535,16 +533,16 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                       />
                     </g>
                   ))}
-                {lineLike && s.linePath && (
+                {lineLike && s.points.length > 0 && (
                   <>
-                    {s.areaPath && (
+                    {s.linePath && s.areaPath && (
                       <path
                         d={s.areaPath}
                         fill={s.color}
                         fillOpacity={type === 'area' ? 0.18 : 0.05}
                       />
                     )}
-                    {type !== 'area' && (
+                    {s.linePath && type !== 'area' && (
                       <path
                         d={s.linePath}
                         fill="none"
@@ -555,19 +553,21 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                         strokeLinecap="round"
                       />
                     )}
-                    <path
-                      d={s.linePath}
-                      fill="none"
-                      stroke={s.color}
-                      strokeOpacity={type === 'area' ? 0.9 : 1}
-                      strokeWidth={
-                        type === 'area'
-                          ? style.strokeWidth + 0.4
-                          : style.strokeWidth + 0.8
-                      }
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                    />
+                    {s.linePath && (
+                      <path
+                        d={s.linePath}
+                        fill="none"
+                        stroke={s.color}
+                        strokeOpacity={type === 'area' ? 0.9 : 1}
+                        strokeWidth={
+                          type === 'area'
+                            ? style.strokeWidth + 0.4
+                            : style.strokeWidth + 0.8
+                        }
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                    )}
                     {s.points.map((point, i) => (
                       <circle
                         key={`line-pt-${i}`}
@@ -752,8 +752,8 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
             // Resolve the saved data range against THIS drawing's scales.
             // A label no longer on the axis (data replaced) draws nothing.
             const { x, y } = annotation.target
-            const xa = geometry.xPixelForLabel(x.from)
-            const xb = geometry.xPixelForLabel(x.to)
+            const xa = annotationXPixel(geometry, x.from)
+            const xb = annotationXPixel(geometry, x.to)
             if (xa === null || xb === null) return null
             const range = {
               x0: Math.max(plot.left, Math.min(xa, xb) - geometry.xPad),

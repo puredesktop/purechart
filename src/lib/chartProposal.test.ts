@@ -49,3 +49,13 @@ it('rejects silently normalized settings and false range statistics', () => {
   annotation.target.summary.average = 20
   expect(createChartProposal('chart1', spec, table, { ...input, patch: { annotations: [annotation] } }).spec.chart.annotations).toHaveLength(1)
 })
+
+it('previews date annotations that validation accepts instead of silently omitting them', () => {
+  const { spec, table } = createChartAgentSpec({ dataText: 'day,value\n2024-01-15,10\n2024-01-16,20', type: 'line' })
+  const proposal = createChartProposal('chart1', spec, table, {
+    explanation: 'Call out the first observation.',
+    patch: { annotations: [{ id: 'date', createdAt: 'now', text: 'First observation', target: { kind: 'point', seriesKey: 'value', xLabel: '2024-01-15T00:00:00.000Z', value: 10 } }] },
+  })
+  expect(proposal.preview).toContain('First observation')
+  expect(spec.chart.annotations).toEqual([])
+})
