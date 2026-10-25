@@ -245,7 +245,7 @@ function momentAxisLabels(ticks: AxisTick[]): string[] | null {
 }
 
 /** The fewest-dropped run of every step-th moment tick whose labels all print whole. */
-function readableMomentTicks(ticks: AxisTick[], firstStep: number): AxisTick[] | null {
+function readableMomentTicks(ticks: AxisTick[], firstStep: number): AxisTick[] {
   const last = ticks[ticks.length - 1]
   for (let step = firstStep; step < ticks.length; step += 1) {
     const every = ticks.filter((_, index) => index % step === 0)
@@ -256,15 +256,18 @@ function readableMomentTicks(ticks: AxisTick[], firstStep: number): AxisTick[] |
       if (shown) return visible.map((tick, index) => ({ ...tick, fullLabel: tick.fullLabel ?? tick.label, label: shown[index] }))
     }
   }
-  return null
+  // Even two complete labels may not fit a small panel. Keep one central
+  // tick with its date and full precision rather than falling through to
+  // category truncation, which can erase both the time and the day.
+  const tick = ticks[Math.floor(ticks.length / 2)]!
+  return [{ ...tick, fullLabel: tick.fullLabel ?? tick.label }]
 }
 
 function readableXTicks(ticks: AxisTick[], plot: PlotRect, moments = false): AxisTick[] {
   if (ticks.length <= 1) return ticks
   const maxVisibleTicks = Math.max(2, Math.floor(plot.width / MIN_X_TICK_GAP))
   const step = Math.max(1, Math.ceil(ticks.length / maxVisibleTicks))
-  const moment = moments && ticks.every(tick => MOMENT_LABEL_RE.test(tick.label)) ? readableMomentTicks(ticks, step) : null
-  if (moment) return moment
+  if (moments && ticks.every(tick => MOMENT_LABEL_RE.test(tick.label))) return readableMomentTicks(ticks, step)
   const visible = ticks.filter((_, index) => index % step === 0)
   const last = ticks[ticks.length - 1]
   if (visible[visible.length - 1] !== last) visible.push(last)
@@ -276,8 +279,7 @@ function readableXTicks(ticks: AxisTick[], plot: PlotRect, moments = false): Axi
   return visible.map(tick => ({
     ...tick,
     fullLabel: tick.fullLabel ?? tick.label,
-    // Moments that cannot print whole even two at a time keep their time.
-    label: truncateLabel(moments && MOMENT_LABEL_RE.test(tick.label) ? tick.label.slice(11) : tick.label, maxChars),
+    label: truncateLabel(tick.label, maxChars),
   }))
 }
 

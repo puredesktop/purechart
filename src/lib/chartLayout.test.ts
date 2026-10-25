@@ -385,6 +385,29 @@ describe('computeChartGeometry', () => {
     expect(expectReadableMoments(millis, 'line', 400)).toEqual(['09:00:00.100', '09:00:00.120', '09:00:00.140'])
   })
 
+  it('shows one complete moment when even two labels cannot fit', () => {
+    const cases = [
+      { width: 220, types: ['line', 'bar'] as const, dates: [100, 110, 120, 130, 140, 150].map(ms => new Date(Date.UTC(2024, 2, 1, 9, 0, 0, ms))) },
+      { width: 250, types: ['line', 'bar'] as const, dates: ['2024-12-31T09:00:10Z', '2025-01-01T09:00:10Z'].map(s => new Date(s)) },
+      { width: 320, types: ['bar'] as const, dates: ['2024-12-31T09:00:00.100Z', '2025-01-01T09:00:00.110Z'].map(s => new Date(s)) },
+    ]
+    for (const { width, types, dates } of cases) {
+      for (const type of types) {
+        const geometry = computeChartGeometry(momentTable(dates), specWith({ type, encodings: { x: 'at', y: ['v'], series: null } }), { width, height: 400 })
+        expect(geometry.xTicks).toHaveLength(1)
+        const tick = geometry.xTicks[0]!
+        expect(tick.label).toBe(tick.fullLabel)
+        expect(tick.label).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
+        expect(tick.label).not.toContain('…')
+        // Reducing labels must leave the plotted readings and lookup intact.
+        expect(geometry.series[0]!.points).toHaveLength(dates.length)
+        for (const point of geometry.series[0]!.points) {
+          expect(geometry.xPixelForLabel(point.xLabel)).toBeCloseTo(point.cx, 6)
+        }
+      }
+    }
+  })
+
   it('accepts the ISO timestamps getChartData shows as range endpoints', () => {
     const intraday: DataTable = {
       columns: [{ name: 'at', type: 'date' }, { name: 'v', type: 'number' }],
