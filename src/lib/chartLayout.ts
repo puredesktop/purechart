@@ -9,7 +9,9 @@ import {
   scaleLog,
   scalePoint,
   scaleTime,
+  scaleUtc,
   timeFormat,
+  utcFormat,
 } from 'd3'
 import type { CellValue, ColumnInfo, DataTable } from './dataParse'
 import type { ChartSpec, ChartType } from './chartSpec'
@@ -111,10 +113,54 @@ function asNumber(value: CellValue): number | null {
   return null
 }
 
-function asCategory(value: CellValue): string | null {
+/**
+ * How much of a date the x labels need. It is decided for the whole column:
+ * one reading at 09:30 means every reading is a moment, not a day, and
+ * cutting them all to the day would collapse a day's readings into one band.
+ */
+export type DateDetail = 'day' | 'minute' | 'second' | 'millisecond'
+
+export function dateDetailOf(values: CellValue[]): DateDetail {
+  let detail: DateDetail = 'day'
+  for (const value of values) {
+    if (!(value instanceof Date)) continue
+    // `2024/03/01` and `2024-3-1` parse as local midnight, not UTC: outside
+    // UTC that reads as a time of day, but it is a plain date.
+    if (!value.getHours() && !value.getMinutes() && !value.getSeconds() && !value.getMilliseconds()) continue
+    if (value.getUTCMilliseconds()) return 'millisecond'
+    if (value.getUTCSeconds()) detail = 'second'
+    else if (detail === 'day' && (value.getUTCHours() || value.getUTCMinutes())) detail = 'minute'
+  }
+  return detail
+}
+
+const TIME_END: Record<Exclude<DateDetail, 'day'>, number> = { minute: 16, second: 19, millisecond: 23 }
+
+/** `2024-03-01`, or `2024-03-01 09:30`, `…09:30:15`, `…09:30:15.250` when times matter. */
+export function dateCategoryLabel(value: Date, detail: DateDetail = 'day'): string {
+  const iso = value.toISOString()
+  if (detail === 'day') return iso.slice(0, 10)
+  return `${iso.slice(0, 10)} ${iso.slice(11, TIME_END[detail])}`
+}
+
+function asCategory(value: CellValue, detail: DateDetail = 'day'): string | null {
   if (value === null) return null
-  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  if (value instanceof Date) return dateCategoryLabel(value, detail)
   return String(value)
+}
+
+/** An exact grouping key for an x value: two moments on one day stay apart. */
+function xKey(value: CellValue): string {
+  return value instanceof Date ? String(value.getTime()) : value === null ? '—' : String(value)
+}
+
+/**
+ * Ticks carry as much time as their spacing needs — seconds for ticks seconds
+ * apart, milliseconds below that. readableXTicks decides what of it to print.
+ */
+function intradayTickLabel(tick: Date, ticks: Date[]): string {
+  const detail = dateDetailOf(ticks)
+  return detail === 'day' ? utcFormat('%Y-%m-%d')(tick) : dateCategoryLabel(tick, detail)
 }
 
 function emptyGeometry(dims: ChartDims, message: string, refusalReason?: ChartGeometry['refusalReason']): ChartGeometry {
@@ -151,10 +197,80 @@ function truncateLabel(label: string, maxChars: number): string {
   return `${label.slice(0, maxChars - 1)}…`
 }
 
-function readableXTicks(ticks: AxisTick[], plot: PlotRect): AxisTick[] {
+const MOMENT_LABEL_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/
+
+/**
+ * A date label back to its instant. The moment labels asCategory writes
+ * (`2024-03-01 09:30`) carry no zone but mean UTC; anything else — a bare
+ * day, or an ISO timestamp with its own zone — parses as written.
+ */
+function parseDateLabel(label: string): number {
+  return Date.parse(/^\d{4}-\d{2}-\d{2} [\d:.]+$/.test(label) ? `${label.replace(' ', 'T')}Z` : label)
+}
+
+/** An ISO timestamp such as getChartData shows, as the band category it falls in. */
+function isoAsCategory(label: string, detail: DateDetail): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(label)) return null
+  const at = Date.parse(label)
+  return Number.isFinite(at) ? dateCategoryLabel(new Date(at), detail) : null
+}
+
+/**
+ * What an axis of moments prints. Every tick shows its time — that is what
+ * tells neighbours apart — and the day only where it changes: the first tick
+ * and the first after midnight, when it fits beside its neighbours. Nothing
+ * is truncated, since a cut time is a repeated time: when the labels cannot
+ * all be printed whole and distinct, this answers null and the caller shows
+ * fewer ticks.
+ */
+function momentAxisLabels(ticks: AxisTick[]): string[] | null {
+  const labels = ticks.map(tick => tick.label)
+  const days = labels.map(label => label.slice(0, 10))
+  const times = labels.map(label => label.slice(11))
+  const sameYear = days.every(day => day.slice(0, 4) === days[0].slice(0, 4))
+  const dated = labels.map((_, i) => `${sameYear ? days[i].slice(5) : days[i]} ${times[i]}`)
+  // Labels are centred on their ticks: two fit if half of each shares the gap.
+  const clear = (a: number, b: number, widthA: number, widthB: number) =>
+    (widthA + widthB) * X_TICK_CHAR_WIDTH / 2 + 4 <= Math.abs(ticks[b].position - ticks[a].position)
+  let shown = times
+  if (!days.every(day => day === days[0])) {
+    const newDay = (i: number) => i === 0 || days[i] !== days[i - 1]
+    const width = (i: number) => (newDay(i) ? dated[i] : times[i]).length
+    const fitsDated = (i: number) => [i - 1, i + 1].every(n => n < 0 || n >= labels.length || clear(i, n, dated[i].length, width(n)))
+    // Times without their day would read as one day running backwards.
+    if (!labels.every((_, i) => !newDay(i) || fitsDated(i))) return null
+    shown = labels.map((_, i) => newDay(i) ? dated[i] : times[i])
+    // Ticks a day apart at one hour need the day to differ at all.
+    if (new Set(shown).size !== shown.length) shown = dated
+  }
+  if (new Set(shown).size !== shown.length) return null
+  return shown.every((label, i) => i === 0 || clear(i - 1, i, shown[i - 1].length, label.length)) ? shown : null
+}
+
+/** The fewest-dropped run of every step-th moment tick whose labels all print whole. */
+function readableMomentTicks(ticks: AxisTick[], firstStep: number): AxisTick[] {
+  const last = ticks[ticks.length - 1]
+  for (let step = firstStep; step < ticks.length; step += 1) {
+    const every = ticks.filter((_, index) => index % step === 0)
+    const runs = every[every.length - 1] === last ? [every] : [[...every, last], every]
+    for (const visible of runs) {
+      if (visible.length < 2) continue
+      const shown = momentAxisLabels(visible)
+      if (shown) return visible.map((tick, index) => ({ ...tick, fullLabel: tick.fullLabel ?? tick.label, label: shown[index] }))
+    }
+  }
+  // Even two complete labels may not fit a small panel. Keep one central
+  // tick with its date and full precision rather than falling through to
+  // category truncation, which can erase both the time and the day.
+  const tick = ticks[Math.floor(ticks.length / 2)]!
+  return [{ ...tick, fullLabel: tick.fullLabel ?? tick.label }]
+}
+
+function readableXTicks(ticks: AxisTick[], plot: PlotRect, moments = false): AxisTick[] {
   if (ticks.length <= 1) return ticks
   const maxVisibleTicks = Math.max(2, Math.floor(plot.width / MIN_X_TICK_GAP))
   const step = Math.max(1, Math.ceil(ticks.length / maxVisibleTicks))
+  if (moments && ticks.every(tick => MOMENT_LABEL_RE.test(tick.label))) return readableMomentTicks(ticks, step)
   const visible = ticks.filter((_, index) => index % step === 0)
   const last = ticks[ticks.length - 1]
   if (visible[visible.length - 1] !== last) visible.push(last)
@@ -290,7 +406,7 @@ function foldTail(series: SeriesData[], limit: number, selection = chooseSeries(
   const totals = new Map<string, { xRaw: CellValue; y: number }>()
   for (const entry of folded) {
     for (const value of entry.values) {
-      const key = asCategory(value.xRaw) ?? '—'
+      const key = xKey(value.xRaw)
       const existing = totals.get(key)
       if (existing) existing.y += value.y
       else totals.set(key, { xRaw: value.xRaw, y: value.y })
@@ -337,7 +453,7 @@ function stackedTotals(seriesData: SeriesData[]): number[] {
   const below = new Map<string, number>()
   for (const data of seriesData) {
     for (const value of data.values) {
-      const key = asCategory(value.xRaw) ?? ''
+      const key = xKey(value.xRaw)
       const stack = value.y >= 0 ? above : below
       stack.set(key, (stack.get(key) ?? 0) + value.y)
     }
@@ -361,6 +477,8 @@ export interface GeometryOptions {
   yDomain?: [number, number]
   xDomain?: [number, number]
   xCategories?: string[]
+  /** Date label detail for the x column, when panels must share it. */
+  xDateDetail?: DateDetail
   histogramValues?: number[]
   seriesSelection?: SeriesSelection
   /**
@@ -402,6 +520,7 @@ export function computeChartGeometry(
     )
   }
 
+  const xDetail = options.xDateDetail ?? (xCol?.type === 'date' ? dateDetailOf(table.rows.map(row => row[xCol.name])) : 'day')
   const rawSeries = collectSeries(table, spec, xCol, options.seriesSelection)
   const rawValues = rawSeries.flatMap(series => series.values.map(v => v.y))
   if (rawValues.length === 0)
@@ -474,7 +593,7 @@ export function computeChartGeometry(
     const categories: string[] = binned ? [...binned.categories] : [...options.xCategories ?? []]
     if (!binned && xCol) {
       for (const row of table.rows) {
-        const cat = asCategory(row[xCol.name])
+        const cat = asCategory(row[xCol.name], xDetail)
         if (cat !== null && !categories.includes(cat)) categories.push(cat)
       }
     }
@@ -485,7 +604,7 @@ export function computeChartGeometry(
         .padding(0.2)
       bandwidth = scale.bandwidth()
       xPos = raw => {
-        const cat = asCategory(raw)
+        const cat = asCategory(raw, xDetail)
         const at = cat === null ? undefined : scale(cat)
         return at === undefined ? null : at
       }
@@ -506,7 +625,7 @@ export function computeChartGeometry(
         .range([plot.left, plot.right])
         .padding(0.5)
       xPos = raw => {
-        const cat = asCategory(raw)
+        const cat = asCategory(raw, xDetail)
         const at = cat === null ? undefined : scale(cat)
         return at === undefined ? null : at
       }
@@ -518,6 +637,11 @@ export function computeChartGeometry(
       }))
       xPixelForLabel = label => scale(label) ?? null
       xPad = scale.step() / 2
+    }
+    if (!binned && xCol?.type === 'date') {
+      // Callers may name a band by the ISO timestamp getChartData shows.
+      const byCategory = xPixelForLabel
+      xPixelForLabel = label => byCategory(label) ?? byCategory(isoAsCategory(label, xDetail) ?? label)
     }
   } else {
     // Only reached with a real x column: histograms are always banded.
@@ -531,21 +655,23 @@ export function computeChartGeometry(
     if (xLo > xHi || (xLo === xHi && (axisX.min != null || axisX.max != null))) return emptyGeometry(dims, 'X bounds must increase.')
     if (axisX.scale === 'log' && (xColumn.type !== 'number' || xNums.some(n => n <= 0) || xLo <= 0)) return emptyGeometry(dims, 'Log X requires positive numeric values.')
     if (xColumn.type === 'date') {
-      const scale = scaleTime()
+      // Times of day are read in UTC, as the labels asCategory produces are.
+      const intraday = xDetail !== 'day'
+      const scale = (intraday ? scaleUtc() : scaleTime())
         .domain([new Date(xLo), new Date(xHi)])
         .range([plot.left, plot.right])
       if (axisX.min == null && axisX.max == null) scale.nice()
-      const fmt = timeFormat('%Y-%m-%d')
+      const ticks = scale.ticks(6)
       xPos = raw => {
         const n = asNumber(raw)
         return n === null ? null : scale(new Date(n))
       }
-      xTicks = scale.ticks(6).map(d => ({ position: scale(d), label: fmt(d) }))
+      xTicks = ticks.map(d => ({ position: scale(d), label: intraday ? intradayTickLabel(d, ticks) : timeFormat('%Y-%m-%d')(d) }))
       xFrameStart = scale(new Date(xLo))
       xFrameEnd = scale(new Date(xHi))
-      // Date labels are the ISO day asCategory produced; parse them back.
+      // Date labels are the ISO day or moment asCategory produced; parse them back.
       xPixelForLabel = label => {
-        const at = Date.parse(label)
+        const at = parseDateLabel(label)
         return Number.isFinite(at) ? scale(new Date(at)) : null
       }
     } else {
@@ -610,7 +736,7 @@ export function computeChartGeometry(
       if (cx === null) continue
       // An empty bin keeps its slot on the axis but draws no bar or label.
       if (histogram && value.y === 0) continue
-      const xLabel = asCategory(value.xRaw) ?? ''
+      const xLabel = asCategory(value.xRaw, xDetail) ?? ''
       if (stacked) {
         // Each segment starts where the previous series' segment ended.
         const stack = value.y >= 0 ? stackAbove : stackBelow
@@ -684,7 +810,7 @@ export function computeChartGeometry(
   return {
     dims,
     plot,
-    xTicks: readableXTicks(xTicks, plot),
+    xTicks: readableXTicks(xTicks, plot, !binned && xCol?.type === 'date' && xDetail !== 'day'),
     yTicks,
     xFrame: { start: xFrameStart, end: xFrameEnd },
     yFrame: { start: yScale(axisY.min != null ? yMin : dataMin), end: yScale(axisY.max != null ? yMax : dataMax) },

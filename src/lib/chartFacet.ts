@@ -1,5 +1,5 @@
 import { transformChartData } from './chartTransform'
-import { chartSeriesSelection, computeChartGeometry, type ChartDims, type ChartGeometry } from './chartLayout'
+import { chartSeriesSelection, computeChartGeometry, dateCategoryLabel, dateDetailOf, type ChartDims, type ChartGeometry } from './chartLayout'
 import type { ChartSpec } from './chartSpec'
 import type { DataTable } from './dataParse'
 
@@ -133,11 +133,12 @@ export function facetLayout(
   // categories/dates absent from a particular group.
   const xName = spec.chart.encodings.x
   const xValues = xName ? table.rows.map(row => row[xName]).filter(value => value !== null) : []
-  const xCategories = [...new Set(xValues.map(value => value instanceof Date ? value.toISOString().slice(0, 10) : String(value)))]
+  const xDateDetail = dateDetailOf(xValues)
+  const xCategories = [...new Set(xValues.map(value => value instanceof Date ? dateCategoryLabel(value, xDateDetail) : String(value)))]
   const numbers = xValues.map(value => value instanceof Date ? value.getTime() : typeof value === 'number' ? value : Number(value)).filter(Number.isFinite)
   const histogramValues = spec.chart.type === 'histogram' ? table.rows.flatMap(row => spec.chart.encodings.y.map(name => row[name])).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) : undefined
   const sharedOptions = {
-    compact: options.compact, xCategories, histogramValues,
+    compact: options.compact, xCategories, xDateDetail, histogramValues,
     seriesSelection: chartSeriesSelection(table, panelSpec),
     ...(numbers.length ? { xDomain: [Math.min(...numbers), Math.max(...numbers)] as [number, number] } : {}),
   }
