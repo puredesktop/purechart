@@ -124,6 +124,9 @@ export function dateDetailOf(values: CellValue[]): DateDetail {
   let detail: DateDetail = 'day'
   for (const value of values) {
     if (!(value instanceof Date)) continue
+    // `2024/03/01` and `2024-3-1` parse as local midnight, not UTC: outside
+    // UTC that reads as a time of day, but it is a plain date.
+    if (!value.getHours() && !value.getMinutes() && !value.getSeconds() && !value.getMilliseconds()) continue
     if (value.getUTCMilliseconds()) return 'millisecond'
     if (value.getUTCSeconds()) detail = 'second'
     else if (detail === 'day' && (value.getUTCHours() || value.getUTCMinutes())) detail = 'minute'

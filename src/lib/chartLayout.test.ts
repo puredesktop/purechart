@@ -445,4 +445,14 @@ describe('computeChartGeometry', () => {
     const bar = computeChartGeometry(daily, specWith({ type: 'bar', encodings: { x: 'day', y: ['v'], series: null } }), dims)
     expect(bar.xTicks.map(t => t.label)).toEqual(['2024-03-01', '2024-03-02'])
   })
+
+  it('treats dates parsed at local midnight as plain dates in any time zone', () => {
+    // `2024/03/01` parses to local midnight, which outside UTC is not 00:00 UTC.
+    const local = momentTable([1, 2, 3].map(d => new Date(2024, 2, d)))
+    for (const type of ['line', 'bar'] as const) {
+      const geometry = computeChartGeometry(local, specWith({ type, encodings: { x: 'at', y: ['v'], series: null } }), dims)
+      expect(geometry.xTicks.every(t => !/\d{2}:\d{2}/.test(t.label)), `${type}: ${geometry.xTicks.map(t => t.label)}`).toBe(true)
+      expect(geometry.series[0]!.points.every(p => !p.xLabel.includes(':'))).toBe(true)
+    }
+  })
 })
