@@ -374,7 +374,11 @@ export function ControlsPanel({
           disabled={disabled || encodings.y.length > 1}
           onChange={id => session.setSeries(id === NONE_ID ? null : id)}
         />
-        {encodings.series ? <p>A series column splits one Y measure. Clear Series to add another measure.</p> : encodings.y.length > 1 ? <p>Choose one Y measure to split it by Series.</p> : null}
+        {encodings.series ? (
+          <StyledHint>A series column splits one Y measure. Clear Series to add another measure.</StyledHint>
+        ) : encodings.y.length > 1 ? (
+          <StyledHint>Choose one Y measure to split it by Series.</StyledHint>
+        ) : null}
       </StyledSection>
 
       <StyledSection>
