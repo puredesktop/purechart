@@ -604,7 +604,7 @@ export function ChartWorkspace({
 
         <StyledCanvasArea {...compactPart(compact, 'area')}>
           <StyledCanvasFrame {...compactPart(compact, 'frame')}>
-            {!onSheet && drawn && !compact && <CrossAppDragHandle label="chart" style={{alignSelf:'flex-end',margin:8}} getContent={() => {
+            {!onSheet && drawn && <CrossAppDragHandle label="chart" style={{alignSelf:'flex-end',margin:8}} getContent={() => {
               if (!svgRef.current) throw new Error('The chart is not ready.')
               return { name: `${session.spec.title || 'chart'}.svg`, alt: session.spec.title || 'Chart', caption: session.spec.chart.caption || undefined, dataUrl: svgAssetDataUrl(serializeSvg(svgRef.current)) }
             }} />}
