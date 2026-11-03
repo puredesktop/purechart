@@ -1,0 +1,46 @@
+/* Compact PureChart, held inside a page (useCompactInRoom). The frame carries data-compact-room only then, and every rule
+   here starts from it, so with compact off nothing in this file applies. Chrome is hidden, not removed: everything stays
+   mounted, so the chart, its history and the agent's tools live on. Full app gives it all back. */
+
+/* The app header, the row counts, the pane slider, the review and export tabs, the table drawer, the status line. */
+[data-compact-room] > header,
+[data-compact-room] [data-compact='hide'] {
+  display: none !important;
+}
+
+/* The chart fills the box. Its one bar holds the controls' toggle, the name, undo and redo. The controls open beside it,
+   narrower than a full window's, so the chart stays readable while it changes. */
+[data-compact-room] [data-compact='workspace'] {
+  --chart-panel-width: 272px !important;
+}
+[data-compact-room] [data-compact='workspace'] > aside,
+[data-compact-room] #purechart-controls {
+  padding: 0 12px 14px;
+}
+[data-compact-room] [data-compact='area'] {
+  padding: 0 10px 10px 0;
+}
+[data-compact-room] [data-controls-hidden='true'] [data-compact='area'] {
+  padding-left: 10px;
+}
+[data-compact-room] [data-compact='frame'] {
+  padding: 10px 12px;
+}
+
+/* Held inside an entry of the room: one surface, flat on the paper, with square edges and no second sheet. */
+html[data-held-in-room]:has([data-compact-room]),
+html[data-held-in-room]:has([data-compact-room]) body,
+html[data-held-in-room]:has([data-compact-room]) [data-compact-room] {
+  background: #ffffff;
+}
+html[data-held-in-room]:has([data-compact-room]) [data-compact='root'] {
+  --glass-panel: #ffffff;
+}
+html[data-held-in-room]:has([data-compact-room]) [data-compact='area'],
+html[data-held-in-room]:has([data-compact-room]) [data-controls-hidden='true'] [data-compact='area'] {
+  padding: 0;
+}
+html[data-held-in-room]:has([data-compact-room]) [data-compact='frame'] {
+  border: 0;
+  border-radius: 0;
+}

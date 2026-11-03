@@ -11,6 +11,7 @@ import { usePlatformBridge } from '@purescience/platform-ui/bridge/react/usePlat
 import { usePlatformViewportResource } from '@purescience/platform-ui/bridge/react/usePlatformViewportResource'
 import { useDocumentLifecycle } from '@purescience/platform-ui/bridge/react/useDocumentLifecycle'
 import { useDocumentHotkeys } from '@purescience/platform-ui/bridge/react/useDocumentHotkeys'
+import { useCompactInRoom } from './hooks/useCompactInRoom'
 import {
   DocumentHeaderActions,
   DocumentSwitcher,
@@ -130,6 +131,7 @@ function ChartDocumentApp({
   // The whole document, not one chart of it: adding a chart has to reach disk.
   const boundSheetRef = useRef(session.sheet)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  const compact = useCompactInRoom()
   // The rendered chart: the export buttons and the exportChart tool
   // serialize this one element, so both produce the same file.
   const svgRef = useRef<SVGSVGElement>(null)
@@ -340,6 +342,7 @@ function ChartDocumentApp({
 
   return (
     <AppFrame
+      {...(compact ? { 'data-compact-room': '' } : undefined)}
       headerDocumentName={
         session.spec.title?.trim() || (lifecycle.doc.path ? fileNameFromPath(lifecycle.doc.path) : undefined)
       }
@@ -375,6 +378,7 @@ function ChartDocumentApp({
         session={session}
         svgRef={svgRef}
         onCommitTitle={commitTitle}
+        compact={compact}
       />
       <DocumentSwitcher
         appSlug={CHART_APP_SLUG}
