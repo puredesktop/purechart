@@ -253,3 +253,5 @@ must be regenerated from current chart context. Direct tools remain appropriate
 for explicit small edits. `captionFindingIds` uses the proposed chart's exact
 computed findings for a grounded caption. Free-form claims and causal explanations
 still require human review; annotation target validation is not semantic fact checking.
+
+Copies of this app can run side by side (a tab and one held inside a page). They merge each other's work on one document chart by chart, so a change made in the other copy can appear while you work; read the chart again before replacing something you read earlier.

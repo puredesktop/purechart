@@ -29,6 +29,7 @@ import type { InteractionMode } from '../lib/chartInteraction'
 import type { ChartSession } from '../hooks/useChartSession'
 import { useElementSize } from '../hooks/useElementSize'
 import { usePanelOpen } from '../hooks/usePanelOpen'
+import { compactPart } from '../hooks/useCompactInRoom'
 import { ChartCanvas } from './ChartCanvas'
 import { ChartCaption } from './ChartCaption'
 import { ControlsPanel } from './ControlsPanel'
@@ -362,6 +363,8 @@ interface ChartWorkspaceProps {
   svgRef: RefObject<SVGSVGElement | null>
   /** Commit the chart title as the document name (rename on filed docs). */
   onCommitTitle: (title: string) => void
+  /** Held inside a page (useCompactInRoom): the chart first, and only what edits it. */
+  compact?: boolean
 }
 
 export function ChartWorkspace({
@@ -370,6 +373,7 @@ export function ChartWorkspace({
   session,
   svgRef,
   onCommitTitle,
+  compact = false,
 }: ChartWorkspaceProps): React.ReactElement {
   const { ref: canvasRef, size } = useElementSize<HTMLDivElement>()
   const [interactionMode, setInteractionMode] =
@@ -378,7 +382,12 @@ export function ChartWorkspace({
   const [tableOpen, setTableOpen] = useState(false)
   // The controls column can be closed so the chart takes the room; the
   // choice is remembered across reloads.
-  const [controlsOpen, setControlsOpen] = usePanelOpen('purechart.controlsOpen')
+  const [wholeAppControlsOpen, setWholeAppControlsOpen] = usePanelOpen('purechart.controlsOpen')
+  // Held in a page the chart has the box, and the controls open beside it only when asked for. What is done here never
+  // touches the full app's own choice, which Full app reads back untouched. With nothing drawn yet, the data is the way in.
+  const [compactControlsOpen, setCompactControlsOpen] = useState(false)
+  const controlsOpen = compact ? compactControlsOpen || session.table.rows.length === 0 : wholeAppControlsOpen
+  const setControlsOpen = compact ? setCompactControlsOpen : setWholeAppControlsOpen
   const controlsHidden = !controlsOpen
   const [panelWidth, setPanelWidth] = useState(() => {
     try { const value = Number(localStorage.getItem('purechart.panelWidth')); return value >= 300 && value <= 640 ? value : 360 }
@@ -459,8 +468,15 @@ export function ChartWorkspace({
     return () => window.removeEventListener('keydown', onKey)
   }, [onSheet, session])
 
+  // A chart alone on its sheet opens straight away: the sheet is for choosing between several.
+  const onlyChart = session.sheet.charts.length === 1 ? session.sheet.charts[0]!.id : null
+  useEffect(() => {
+    if (compact && onSheet && onlyChart && session.table.rows.length > 0) session.lookAtChart(onlyChart)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compact, onSheet, onlyChart, session.table.rows.length])
+
   return (
-    <StyledRoot data-app="chart">
+    <StyledRoot data-app="chart" {...compactPart(compact, 'root')}>
         <StyledHeader>
           <StyledHeaderTitle>
             <StyledPanelToggle
@@ -491,7 +507,7 @@ export function ChartWorkspace({
                 if (event.key === 'Enter') event.currentTarget.blur()
               }}
             />
-            <StyledChartMeta>
+            <StyledChartMeta {...compactPart(compact, 'hide')}>
               {session.table.rows.length} rows · {session.table.columns.length}{' '}
               columns
               {session.sheet.charts.length > 1
@@ -509,18 +525,19 @@ export function ChartWorkspace({
                 ‹ Sheet
               </StyledHeaderExportButton>
             )}
-            <StyledHeaderExportButton disabled={!drawn || onSheet} onClick={() => showPanel('export')}>Export…</StyledHeaderExportButton>
+            <StyledHeaderExportButton {...compactPart(compact, 'hide')} disabled={!drawn || onSheet} onClick={() => showPanel('export')}>Export…</StyledHeaderExportButton>
           </StyledHeaderActions>
         </StyledHeader>
-      <StyledWorkspace data-controls-hidden={controlsHidden} style={{ '--chart-panel-width': `${panel === 'data' ? Math.max(440, panelWidth) : panelWidth}px` } as CSSProperties}>
+      <StyledWorkspace data-controls-hidden={controlsHidden} {...compactPart(compact, 'workspace')} style={{ '--chart-panel-width': `${panel === 'data' ? Math.max(440, panelWidth) : panelWidth}px` } as CSSProperties}>
       <StyledSidebar id="purechart-controls" hidden={controlsHidden} aria-label="Chart controls">
-        <StyledPaneSize>Pane width<input aria-label="Pane width" type="range" min={300} max={640} value={panelWidth} onChange={event => {
+        <StyledPaneSize {...compactPart(compact, 'hide')}>Pane width<input aria-label="Pane width" type="range" min={300} max={640} value={panelWidth} onChange={event => {
           const width = Number(event.target.value); setPanelWidth(width)
           try { localStorage.setItem('purechart.panelWidth', String(width)) } catch { /* Sizing still works without storage. */ }
         }} /></StyledPaneSize>
         <StyledTabs aria-label="Editor panels">
           {(['data', 'chart', 'style', 'review', 'export'] as const).map(tab => (
             <StyledTab key={tab} type="button" aria-pressed={panel === tab}
+              {...compactPart(compact && (tab === 'review' || tab === 'export'), 'hide')}
               onClick={() => setPanel(tab)}>
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </StyledTab>
@@ -585,8 +602,8 @@ export function ChartWorkspace({
 
       <StyledMain>
 
-        <StyledCanvasArea>
-          <StyledCanvasFrame>
+        <StyledCanvasArea {...compactPart(compact, 'area')}>
+          <StyledCanvasFrame {...compactPart(compact, 'frame')}>
             {!onSheet && drawn && <CrossAppDragHandle label="chart" style={{alignSelf:'flex-end',margin:8}} getContent={() => {
               if (!svgRef.current) throw new Error('The chart is not ready.')
               return { name: `${session.spec.title || 'chart'}.svg`, alt: session.spec.title || 'Chart', caption: session.spec.chart.caption || undefined, dataUrl: svgAssetDataUrl(serializeSvg(svgRef.current)) }
@@ -651,6 +668,7 @@ export function ChartWorkspace({
               </StyledCaptionSlot>
             ) : null}
           </StyledCanvasFrame>
+          <div {...compactPart(compact, 'hide')} style={{ display: 'contents' }}>
           <TableDrawer
             columnTypes={session.spec.data.columnTypes}
             sourceText={session.spec.data.inline?.text ?? ''}
@@ -660,8 +678,9 @@ export function ChartWorkspace({
             open={tableOpen}
             onToggle={() => setTableOpen(value => !value)}
           />
+          </div>
         </StyledCanvasArea>
-        <StyledStatus as="footer" role="status"><span title={[saveStatus, session.status].filter(Boolean).join(' · ')}>{saveStatus && `${saveStatus} · `}{session.status}</span>{onRetrySave && <button onClick={onRetrySave}>Retry save</button>}</StyledStatus>
+        <StyledStatus as="footer" role="status" {...compactPart(compact && !onRetrySave, 'hide')}><span title={[saveStatus, session.status].filter(Boolean).join(' · ')}>{saveStatus && `${saveStatus} · `}{session.status}</span>{onRetrySave && <button onClick={onRetrySave}>Retry save</button>}</StyledStatus>
       </StyledMain>
       </StyledWorkspace>
     </StyledRoot>

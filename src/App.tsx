@@ -9,7 +9,8 @@ import { AppFrame } from '@purescience/platform-bridge/components/AppFrame'
 import { EmptyState } from '@purescience/platform-ui/components/common/feedback/EmptyState'
 import { usePlatformBridge } from '@purescience/platform-ui/bridge/react/usePlatformBridge'
 import { usePlatformViewportResource } from '@purescience/platform-ui/bridge/react/usePlatformViewportResource'
-import { useDocumentLifecycle } from '@purescience/platform-ui/bridge/react/useDocumentLifecycle'
+import { useSharedDocument } from './hooks/useSharedDocument'
+import { useCompactInRoom } from './hooks/useCompactInRoom'
 import { useDocumentHotkeys } from '@purescience/platform-ui/bridge/react/useDocumentHotkeys'
 import {
   DocumentHeaderActions,
@@ -21,12 +22,14 @@ import {
   AUTOSAVE_DELAY_MS,
   CHART_APP_SLUG,
   CHART_FILE_SUFFIX,
+  CHART_PACKAGE_CONTENT_FILE,
   CHART_PACKAGE_SUFFIX,
 } from './constants'
 import { usePureChartBoot } from './hooks/usePureChartBoot'
 import { useChartSession } from './hooks/useChartSession'
 import { usePureChartAgentTools } from './hooks/usePureChartAgentTools'
 import { defaultSpec } from './lib/chartSpec'
+import { mergeSheets } from './lib/chartMerge'
 import {
   emptySheet,
   migrateSheet,
@@ -130,11 +133,12 @@ function ChartDocumentApp({
   // The whole document, not one chart of it: adding a chart has to reach disk.
   const boundSheetRef = useRef(session.sheet)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  const compact = useCompactInRoom()
   // The rendered chart: the export buttons and the exportChart tool
   // serialize this one element, so both produce the same file.
   const svgRef = useRef<SVGSVGElement>(null)
 
-  const lifecycle = useDocumentLifecycle({
+  const lifecycle = useSharedDocument({
     appSlug: CHART_APP_SLUG,
     suffix: CHART_PACKAGE_SUFFIX,
     kind: 'package',
@@ -150,11 +154,20 @@ function ChartDocumentApp({
         }
       }
     },
-    // An agent tool result or another app rewrote the open document on
-    // disk. Reload unless the user has unsaved hand edits.
-    onExternalChange: ({ path, dirty }) => {
-      if (dirty || path !== sessionRef.current.documentPath) return
-      void sessionRef.current.openChartPath(path, { externalChange: true })
+    // An agent tool result, another app or a second copy of this one rewrote
+    // the open document on disk. Reload, or merge if this copy has unsaved work.
+    contentFile: CHART_PACKAGE_CONTENT_FILE,
+    parse: text => migrateSheet(JSON.parse(text)),
+    read: readTextFile,
+    conditional: path => !path.endsWith(CHART_FILE_SUFFIX),
+    live: () => sessionRef.current.liveSheet(),
+    merge: mergeSheets,
+    showMerged: sheet => {
+      boundSheetRef.current = sheet
+      sessionRef.current.showMergedSheet(sheet)
+    },
+    reload: path => {
+      if (path === sessionRef.current.documentPath) void sessionRef.current.openChartPath(path, { externalChange: true })
     },
     serialize: () => {
       const bound = boundPathRef.current
@@ -340,6 +353,7 @@ function ChartDocumentApp({
 
   return (
     <AppFrame
+      {...(compact ? { 'data-compact-room': '' } : undefined)}
       headerDocumentName={
         session.spec.title?.trim() || (lifecycle.doc.path ? fileNameFromPath(lifecycle.doc.path) : undefined)
       }
@@ -375,6 +389,7 @@ function ChartDocumentApp({
         session={session}
         svgRef={svgRef}
         onCommitTitle={commitTitle}
+        compact={compact}
       />
       <DocumentSwitcher
         appSlug={CHART_APP_SLUG}

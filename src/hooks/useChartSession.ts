@@ -135,6 +135,8 @@ export interface ChartSession {
   applyProposal: (id: string) => void
   discardProposal: () => void
   isLoadedSheet: (sheet: ChartSheet) => boolean
+  lookAtChart: (id: string) => void
+  showMergedSheet: (sheet: ChartSheet) => void
   liveSheet: () => ChartSheet
   liveDocumentPath: () => string | null
   setTransform: (transform: ChartTransform) => void
@@ -587,6 +589,26 @@ export function useChartSession({
       applySheet({ ...liveSheetRef.current, focusedId: id })
     },
     [applySheet],
+  )
+  /** Open a chart for looking at, on a document just loaded: which chart is on screen is not in the file, so nothing is saved. */
+  const lookAtChart = useCallback(
+    (id: string) => {
+      const untouched = liveSheetRef.current === loadedSheetRef.current
+      const next = { ...liveSheetRef.current, focusedId: id }
+      if (untouched) loadedSheetRef.current = next
+      applySheet(next)
+    },
+    [applySheet],
+  )
+  /** The merge of this copy's work and another's: the chart on screen stays, and the table follows the data if it moved. */
+  const showMergedSheet = useCallback(
+    (next: ChartSheet) => {
+      const sameData = JSON.stringify(next.data) === JSON.stringify(liveSheetRef.current.data)
+      applySheet(next)
+      if (sameData) return
+      void materializeTable(specForChart(next, null)).then(applyTable).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
+    },
+    [applySheet, applyTable],
   )
 
   /**
@@ -1220,6 +1242,8 @@ export function useChartSession({
     acknowledgeSave: () => setStatus(current => current.startsWith('Could not save the outgoing chart:') ? 'Saved pending changes' : current),
     proposal, proposeChart, applyProposal, discardProposal,
     isLoadedSheet: candidate => candidate === loadedSheetRef.current,
+    lookAtChart,
+    showMergedSheet,
     liveSheet: () => liveSheetRef.current,
     liveDocumentPath: () => documentPathRef.current,
     setTransform: transform => updateSpec(current => ({ ...current, chart: { ...current.chart, transform, axes: { ...current.chart.axes, y: { ...current.chart.axes.y, format: transform.aggregate === 'percent' ? 'percent' : current.chart.axes.y.format } } } })),
