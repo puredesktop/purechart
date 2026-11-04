@@ -44,3 +44,137 @@ html[data-held-in-room]:has([data-compact-room]) [data-compact='frame'] {
   border: 0;
   border-radius: 0;
 }
+
+/* The held look: one white surface edge to edge, hairlines instead of boxes, 3px corners, 13px type, one muted navy.
+   The chart itself is the user's drawing and keeps its colours; only the chrome around it is calmed. Tokens are set on the
+   frame itself so they outrank the White appearance's !important values on the page root. */
+[data-compact-room] {
+  --platform-colors-bg: #ffffff;
+  --platform-colors-app-viewport: #ffffff;
+  --platform-colors-surface: #ffffff;
+  --platform-colors-surface-hover: #f5f6f8;
+  --platform-colors-surface-active: #eef0f3;
+  --platform-colors-border: #dde1e7;
+  --platform-colors-border-soft: #dde1e7;
+  --platform-colors-divider: #dde1e7;
+  --glass-panel: #ffffff;
+  --glass-panel-strong: #ffffff;
+  --glass-well: #f5f6f8;
+  --pure-chrome-sidebar: #ffffff;
+  --pure-chrome-well: #f5f6f8;
+  --pure-chrome-hover: #f5f6f8;
+  --pure-chrome-selection: #eef0f3;
+  --pure-chrome-line: #dde1e7;
+  --pure-chrome-fence: #dde1e7;
+  --pure-chrome-accent: #1f3a5f;
+  --pure-chrome-on-accent: #ffffff;
+  background: #ffffff;
+}
+html[data-held-in-room]:has([data-compact-room]):not(#_) body {
+  background: #ffffff !important;
+}
+[data-compact-room] [data-compact='root'] {
+  --purechart-radius-control: 3px;
+  --purechart-radius-panel: 3px;
+  --pure-chrome-radius: 3px;
+  --pure-chrome-ui-size: 13px;
+  --purechart-border: #cdd1d7;
+  --purechart-border-soft: #dde1e7;
+  --purechart-panel: #ffffff;
+  --purechart-panel-subtle: #ffffff;
+  --glass-blur: none;
+}
+/* One bar, ruled off from the chart below it. */
+[data-compact-room] [data-compact='root'] [data-chrome='toolbar'] {
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid #dde1e7;
+  border-radius: 0;
+  box-shadow: none;
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-compact-room] [data-compact='root'] [data-chrome='toolbar'] input[aria-label$='name'] {
+  font-size: 13px;
+  font-weight: 600;
+}
+[data-compact-room] [data-compact='root'] button[data-chrome='toolbar-select'],
+[data-compact-room] [data-compact='root'] button[data-chrome='toolbar-select']:hover:not(:disabled) {
+  min-height: 28px;
+  height: 28px;
+  border-radius: 3px;
+  border: 1px solid #cdd1d7;
+  background: #ffffff;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 500;
+}
+[data-compact-room] [data-compact='root'] button[data-chrome='toolbar-select']:hover:not(:disabled) {
+  background: #f5f6f8;
+}
+[data-compact-room] [data-compact='root'] button[aria-label='Hide controls'],
+[data-compact-room] [data-compact='root'] button[aria-label='Show controls'] {
+  width: 28px;
+}
+[data-compact-room] [data-compact='root'] [data-chrome='toolbar'] > div:first-child {
+  align-items: center;
+}
+/* The controls column: ruled off, its tabs one square segmented control, its fields and buttons 28px with 3px corners. */
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar'] {
+  padding-top: 12px;
+  border-right: 1px solid #dde1e7;
+  background: #ffffff;
+}
+[data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] {
+  padding: 0;
+  gap: 0;
+  border: 1px solid #cdd1d7;
+  border-radius: 3px;
+  background: #ffffff;
+  overflow: hidden;
+}
+[data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button {
+  height: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+}
+[data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button + button {
+  border-left: 1px solid #dde1e7;
+}
+[data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button[aria-selected='true'],
+[data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button[aria-current='true'],
+[data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button[aria-pressed='true'] {
+  background: #eef0f3;
+  font-weight: 600;
+}
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar'] h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar'] button:not(nav button),
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar'] input:not([type='range']):not([type='checkbox']):not([type='radio']),
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar'] select,
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar'] textarea {
+  border-radius: 3px;
+  box-shadow: none;
+}
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar'] textarea {
+  background: #ffffff;
+}
+[data-compact-room] [data-chrome='meta'] {
+  font-size: 12px;
+}
+/* The chart's sheet is white, with no edge of its own. */
+[data-compact-room] [data-compact='root'] [data-compact='frame'] {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: #ffffff;
+}
