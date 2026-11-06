@@ -1,8 +1,12 @@
+import { sanitizeTrend, type TrendSpec } from './chartTrend'
+
 export interface ReferenceLine { id: string; axis: 'x' | 'y'; value: number; label: string }
 export interface ChartPresentation {
   legend: 'auto' | 'top' | 'right' | 'bottom' | 'none'
   references: ReferenceLine[]
   errorBars: { lower: string; upper: string } | null
+  /** A fitted trend through each series, drawn with its R². */
+  trendline?: TrendSpec | null
 }
 export function defaultPresentation(): ChartPresentation { return { legend: 'auto', references: [], errorBars: null } }
 export function sanitizePresentation(value: unknown): ChartPresentation | undefined {
@@ -12,6 +16,7 @@ export function sanitizePresentation(value: unknown): ChartPresentation | undefi
     legend: ['auto', 'top', 'right', 'bottom', 'none'].includes(raw.legend ?? '') ? raw.legend! : 'auto',
     references: Array.isArray(raw.references) ? raw.references.filter(r => r && typeof r.id === 'string' && ['x', 'y'].includes(r.axis) && Number.isFinite(r.value) && typeof r.label === 'string') : [],
     errorBars: raw.errorBars && typeof raw.errorBars.lower === 'string' && typeof raw.errorBars.upper === 'string' ? raw.errorBars : null,
+    ...(sanitizeTrend(raw.trendline) ? { trendline: sanitizeTrend(raw.trendline) } : {}),
   }
 }
 

@@ -18,7 +18,7 @@ export interface TransformedData {
 }
 const text = (value: CellValue | undefined) => value instanceof Date ? value.toISOString() : value == null ? '' : String(value)
 export function defaultTransform(spec: ChartSpec): ChartTransform {
-  return { aggregate: ['bar', 'grouped-bar', 'stacked-bar', 'lollipop'].includes(spec.chart.type) ? 'sum' : 'none', missing: 'omit', filters: [], sort: null }
+  return { aggregate: ['bar', 'grouped-bar', 'stacked-bar', 'lollipop', 'horizontal-bar', 'pie', 'donut'].includes(spec.chart.type) ? 'sum' : 'none', missing: 'omit', filters: [], sort: null }
 }
 export function sanitizeTransform(value: unknown): ChartTransform | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -55,7 +55,7 @@ export function transformChartData(source: DataTable, spec: ChartSpec): Transfor
     return [{ row: copy, indices: [index] }]
   })
   if (config.aggregate === 'percent' && entries.some(e => enc.y.some(y => typeof e.row[y] === 'number' && (e.row[y] as number) < 0))) return { table: { columns: source.columns, rows: [] }, sourceRows: [], excludedRows, summary: '', error: 'Percentage of total requires non-negative source values.' }
-  if (config.aggregate === 'none' && ['bar', 'grouped-bar', 'stacked-bar'].includes(spec.chart.type)) {
+  if (config.aggregate === 'none' && ['bar', 'grouped-bar', 'stacked-bar', 'horizontal-bar', 'pie', 'donut'].includes(spec.chart.type)) {
     const keys = entries.map(e => JSON.stringify([text(e.row[enc.x ?? '']), text(e.row[enc.series ?? '']), text(e.row[spec.chart.facet.column ?? ''])]))
     if (new Set(keys).size < keys.length) return { table: { columns: source.columns, rows: [] }, sourceRows: [], excludedRows, summary: '', error: 'Repeated bar categories need a calculation. Choose Sum, Average, Count, or Percentage.' }
   }

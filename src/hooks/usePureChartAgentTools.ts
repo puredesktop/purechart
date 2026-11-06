@@ -32,6 +32,7 @@ import {
   replaceChartDataHandler,
   saveChartHandler,
   setChartAxisHandler,
+  setChartTrendlineHandler,
   setChartCaptionHandler,
   setChartEncodingsHandler,
   setChartPaletteHandler,
@@ -121,6 +122,8 @@ export function usePureChartAgentTools(
       applyChartFix: invoke => applyChartFixHandler(contextRef.current, invoke),
       facetChart: invoke => facetChartHandler(contextRef.current, invoke),
       setChartAxis: invoke => setChartAxisHandler(contextRef.current, invoke),
+      setChartTrendline: invoke =>
+        setChartTrendlineHandler(contextRef.current, invoke),
       setChartCaption: invoke =>
         setChartCaptionHandler(contextRef.current, invoke),
       focusChart: invoke => focusChartHandler(contextRef.current, invoke),

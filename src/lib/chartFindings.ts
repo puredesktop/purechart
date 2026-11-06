@@ -202,6 +202,7 @@ export function chartFindings(
   const drawn =
     geometry ?? computeChartGeometry(table, spec, { width: 900, height: 540 })
   if (drawn.empty) return []
+  if (drawn.radial) return shareFindings(drawn)
 
   const series = seriesFrom(drawn)
   if (series.length === 0) return []
@@ -355,6 +356,14 @@ export function chartDescription(
   const parts: string[] = [`${form.charAt(0).toUpperCase()}${form.slice(1)} chart.`]
   if (title) parts.push(`${title}.`)
 
+  if (drawn.radial) {
+    const { slices, total } = drawn.radial
+    parts.push(`${slices.length} parts of a total of ${round(total)}.`)
+    for (const slice of slices) parts.push(`${slice.key}, ${round(slice.value)}, ${share(slice.share)}.`)
+    parts.push('Table follows.')
+    return parts.join(' ')
+  }
+
   const first = series[0]?.points[0]?.label
   const last = series[0]?.points[series[0]!.points.length - 1]?.label
   if (first && last && first !== last) parts.push(`${first} to ${last}.`)
@@ -384,4 +393,56 @@ export function chartDescription(
 
   parts.push('Table follows.')
   return parts.join(' ')
+}
+
+function share(fraction: number): string {
+  return `${(fraction * 100).toFixed(fraction < 0.1 ? 1 : 0)}%`
+}
+
+/**
+ * A pie has no order to rise or fall along, so its findings are about
+ * shares: what the largest part takes, what the top two take together, and
+ * how far the smallest is from the largest.
+ */
+function shareFindings(geometry: ChartGeometry): ChartFinding[] {
+  const { slices, total, folded } = geometry.radial!
+  if (slices.length === 0) return []
+  const findings: ChartFinding[] = []
+  const [first, second] = slices
+  findings.push({
+    id: 'largest-share',
+    text: `${first!.key} is the largest part, ${share(first!.share)} of the total.`,
+    working: `${round(first!.value)} of ${round(total)}`,
+    series: first!.key,
+  })
+  if (second && slices.length > 2) {
+    const together = first!.share + second.share
+    findings.push({
+      id: 'top-two',
+      text: `${first!.key} and ${second.key} together make ${together > 0.5 ? 'more than half' : 'less than half'} of it, ${share(together)}.`,
+      working: `${round(first!.value)} + ${round(second.value)} = ${round(first!.value + second.value)} of ${round(total)}`,
+      series: null,
+    })
+  }
+  const named = slices.filter((_, index) => index < slices.length - (folded ? 1 : 0))
+  const smallest = named[named.length - 1]
+  if (smallest && smallest !== first && smallest.value > 0) {
+    const times = first!.value / smallest.value
+    findings.push({
+      id: 'largest-to-smallest',
+      text: `${first!.key} is ${times >= 10 ? round(times) : times.toFixed(1)} times ${smallest.key}, the smallest part named.`,
+      working: `${round(first!.value)} ÷ ${round(smallest.value)}`,
+      series: null,
+    })
+  }
+  if (folded) {
+    const other = slices[slices.length - 1]!
+    findings.push({
+      id: 'folded',
+      text: `${folded} smaller parts are summed into ${other.key}, ${share(other.share)} of the total.`,
+      working: `${round(other.value)} of ${round(total)}`,
+      series: other.key,
+    })
+  }
+  return findings
 }

@@ -1,3 +1,4 @@
+import { withType } from '../lib/chartOptions'
 import { createChartProposal, proposalBase, type ChartProposal, type ChartProposalInput } from '../lib/chartProposal'
 import type { ChartTransform } from '../lib/chartTransform'
 import { editSheetData, type DataEdit } from '../lib/dataEditing'
@@ -733,7 +734,7 @@ export function useChartSession({
   )
 
   const setType = useCallback((type: ChartType) => {
-    updateSpec(current => ({ ...current, chart: { ...current.chart, type } }))
+    updateSpec(current => withType(current, liveTableRef.current, type))
   }, [])
 
   const setX = useCallback(

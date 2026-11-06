@@ -157,7 +157,11 @@
                   "connected-scatter",
                   "lollipop",
                   "slopegraph",
-                  "histogram"
+                  "histogram",
+                  "horizontal-bar",
+                  "pie",
+                  "donut",
+                  "bubble"
                 ]
               }
             }
@@ -199,7 +203,7 @@
         },
         {
           "name": "setChartType",
-          "description": "Set the current chart type. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list.",
+          "description": "Set the current chart type. Replies with a compact summary of the chart after the edit (title, type, encodings, style, annotation count, row and column counts); call getChartContext for the column list. Pie and donut show one measure as shares of a whole (x names the slices; small slices past the palette fold into Other). horizontal-bar is a bar chart turned over so long category names read in full. bubble is a scatter whose area shows a third numeric column (encodings size); switching to bubble picks a size column when none is set.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -215,7 +219,11 @@
                   "connected-scatter",
                   "lollipop",
                   "slopegraph",
-                  "histogram"
+                  "histogram",
+                  "horizontal-bar",
+                  "pie",
+                  "donut",
+                  "bubble"
                 ]
               }
             },
@@ -245,6 +253,10 @@
               "series": {
                 "type": "string",
                 "description": "Column whose values split the first y measure into series. Omit to keep the current setting; null clears it."
+              },
+              "size": {
+                "type": "string",
+                "description": "Bubble charts: the numeric column each bubble's AREA shows. Omit to keep; null clears it."
               }
             }
           },
@@ -324,7 +336,11 @@
                   "connected-scatter",
                   "lollipop",
                   "slopegraph",
-                  "histogram"
+                  "histogram",
+                  "horizontal-bar",
+                  "pie",
+                  "donut",
+                  "bubble"
                 ]
               },
               "x": {
@@ -364,6 +380,10 @@
                     "type": "number"
                   }
                 }
+              },
+              "size": {
+                "type": "string",
+                "description": "Bubble charts: the numeric column each bubble's area shows."
               }
             }
           },
@@ -394,7 +414,11 @@
                       "connected-scatter",
                       "lollipop",
                       "slopegraph",
-                      "histogram"
+                      "histogram",
+                      "horizontal-bar",
+                      "pie",
+                      "donut",
+                      "bubble"
                     ]
                   },
                   "x": {
@@ -587,6 +611,37 @@
             },
             "required": [
               "axis"
+            ]
+          },
+          "requiresApproval": false
+        },
+        {
+          "name": "setChartTrendline",
+          "risk": "write",
+          "description": "Fit a trendline through each series of the current chart (the same edit as the Trendline control) and reply with each fit's equation and R², or why it could not be drawn. kind: linear (straight line), exponential (needs every value above zero), polynomial (degree 2 or 3), or none to remove it. Allowed on line, area, scatter, bubble, connected-scatter, bar, grouped-bar and lollipop charts. Categories are fitted by their position along the axis, dates by time. Quote the R² when you mention the trend: a line that explains little of the variation must not be described as a trend.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "linear",
+                  "exponential",
+                  "polynomial"
+                ]
+              },
+              "degree": {
+                "type": "number",
+                "enum": [
+                  2,
+                  3
+                ],
+                "description": "Polynomial degree; ignored for other kinds."
+              }
+            },
+            "required": [
+              "kind"
             ]
           },
           "requiresApproval": false
@@ -858,7 +913,10 @@
               },
               "palette": {
                 "type": "string",
-                "enum": ["source", "monochrome"],
+                "enum": [
+                  "source",
+                  "monochrome"
+                ],
                 "description": "The chart’s own colours (default), or one ink for a print edition. The figure remembers which."
               }
             }

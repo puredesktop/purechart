@@ -26,6 +26,7 @@ export async function updateChartHandler(
     y: readStringArrayArg(patch, 'y'),
     series:
       'series' in patch ? readAgentToolStringArg(patch, 'series') : undefined,
+    size: 'size' in patch ? readAgentToolStringArg(patch, 'size') : undefined,
     style: readObjectArg(patch, 'style'),
   })
   context.applyChartSpec(spec, {

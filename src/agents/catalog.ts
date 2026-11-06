@@ -20,6 +20,7 @@ export const PURECHART_AGENT_TOOL_NAMES = [
   'applyChartFix',
   'facetChart',
   'setChartAxis',
+  'setChartTrendline',
   'setChartCaption',
   'focusChart',
   'duplicateChart',

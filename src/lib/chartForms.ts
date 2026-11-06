@@ -123,6 +123,56 @@ export function suggestForms(
     })
   }
 
+  if (measure && category) {
+    const names = facetValues(table, category)
+    const longest = Math.max(0, ...names.map(name => name.length))
+    // Long names are cut to a few letters under a column; turned over, they
+    // are written out in full.
+    if (longest > 12 || names.length > 10) {
+      add({
+        type: 'horizontal-bar',
+        job: `Which ${singular(category)} is biggest, names in full`,
+        because: names.length > 10
+          ? `${names.length} ${category} to compare: bars that run left to right keep every name readable.`
+          : `Some ${category} names run to ${longest} characters, too long to sit under a column.`,
+        encodings: encodings(category, [measure], null),
+        facet: null,
+        supported: true,
+        rank: 92,
+      })
+    }
+    const negative = table.rows.some(row => typeof row[measure] === 'number' && (row[measure] as number) < 0)
+    const fits = names.length >= 2 && names.length <= capacity
+    add({
+      type: 'pie',
+      job: `What share of the total each ${singular(category)} has`,
+      because: negative
+        ? `${measure} goes below zero, and a negative share of a whole means nothing.`
+        : fits
+          ? `${names.length} parts of one total — few enough to compare by angle, and the key gives each share as a number.`
+          : names.length < 2
+            ? `Only one ${singular(category)}, so there is nothing to divide.`
+            : `${names.length} parts is more than angles can tell apart; the smallest would be summed into Other. Bars compare them better.`,
+      encodings: encodings(category, [measure], null),
+      facet: null,
+      supported: !negative && names.length >= 2,
+      rank: negative ? 0 : fits ? 65 : 20,
+    })
+  }
+
+  if (shape.numerics.length >= 3) {
+    const size = shape.numerics[2]!
+    add({
+      type: 'bubble',
+      job: `Whether ${shape.numerics[0]} and ${shape.numerics[1]} move together, sized by ${size}`,
+      because: `Three numeric columns: two place each row, and the third becomes the bubble's area.`,
+      encodings: { x: shape.numerics[0]!, y: [shape.numerics[1]!], series: null, size },
+      facet: null,
+      supported: true,
+      rank: 55,
+    })
+  }
+
   if (time && measure && split) {
     add({
       type: 'stacked-bar',

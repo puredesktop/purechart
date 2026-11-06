@@ -1,3 +1,4 @@
+import { scaleLinear } from 'd3'
 import { forwardRef, useEffect, useId, useMemo, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, WheelEvent } from 'react'
 import { annotationXPixel, annotationPoint } from '../lib/chartAnnotationValidation'
@@ -27,6 +28,8 @@ import {
   CHART_MUTED_INK,
 } from '../lib/chartTheme'
 import { CHART_TRANSIENT_ATTR } from '../lib/chartExport'
+import { r2Label } from '../lib/chartTrend'
+import { RadialFigure } from './RadialFigure'
 
 /** Props that keep live exploration state out of every export. */
 const TRANSIENT = { [CHART_TRANSIENT_ATTR]: '' } as const
@@ -67,6 +70,15 @@ function axisTitle(
   return unit ? `${base} (${unit})` : base
 }
 
+/** Two round sizes whose bubbles fit a 28px header, at the chart's scale. */
+function bubbleKeyValues(key: { max: number; maxRadius: number }): Array<{ value: number; r: number }> {
+  const bound = key.max * Math.min(1, (12 / key.maxRadius) ** 2)
+  const ticks = scaleLinear().domain([0, bound]).ticks(3).filter(tick => tick > 0 && tick <= bound)
+  const large = ticks[ticks.length - 1] ?? bound
+  const radius = (value: number) => key.maxRadius * Math.sqrt(value / key.max)
+  return [large, large / 4].map(value => ({ value, r: Math.max(1.5, radius(value)) }))
+}
+
 function formatValue(value: number): string {
   return Number.isInteger(value)
     ? String(value)
@@ -87,12 +99,13 @@ function isBarLike(type: ChartSpec['chart']['type']): boolean {
     type === 'bar' ||
     type === 'grouped-bar' ||
     type === 'stacked-bar' ||
-    type === 'histogram'
+    type === 'histogram' ||
+    type === 'horizontal-bar'
   )
 }
 
 function isPointLike(type: ChartSpec['chart']['type']): boolean {
-  return type === 'scatter'
+  return type === 'scatter' || type === 'bubble'
 }
 
 function pointerPosition(
@@ -302,6 +315,12 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
       )
     }
 
+    if (geometry.radial) {
+      return <RadialFigure ref={ref} radial={geometry.radial} spec={spec} width={dims.width} height={dims.height} bare={bare} />
+    }
+    const horizontal = geometry.orientation === 'horizontal'
+    const bubbleKey = geometry.sizeKey
+
     return (
       <svg
         ref={ref}
@@ -361,6 +380,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
 
         {!bare && (spec.chart.presentation?.legend ?? 'auto') !== 'none' &&
           ((spec.chart.presentation?.legend ?? 'auto') !== 'auto' || barLike) &&
+          !(horizontal && series.length < 2) &&
           series.map((s, index) => {
             const position = spec.chart.presentation?.legend ?? 'auto'
             const x = position === 'right' ? plot.right + 20 : plot.left
@@ -371,7 +391,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
             </g>
           })}
         <g clipPath={`url(#${clipId})`}>
-          {spec.chart.presentation?.references.map(reference => {
+          {!horizontal && spec.chart.presentation?.references.map(reference => {
             const y = geometry.yPixelForValue(reference.value)
             const x = geometry.xPixelForLabel(String(reference.value))
             if (reference.axis === 'x' && x === null) return null
@@ -434,6 +454,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
               dominantBaseline="middle"
               fill={CHART_MUTED_INK}
             >
+              {tick.fullLabel && tick.fullLabel !== tick.label && <title>{tick.fullLabel}</title>}
               {tick.label}
             </text>
           </g>
@@ -457,7 +478,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
 
         {/* What the axes are called. A column name is not a label, and a
             figure that travels into a document takes its labels with it. */}
-        {!bare && axisTitle(spec, 'x', encodings.x) && (
+        {!bare && axisTitle(spec, horizontal ? 'y' : 'x', horizontal ? encodings.y[0] ?? null : encodings.x) && (
           <text
             x={(plot.left + plot.right) / 2}
             y={plot.bottom + 36}
@@ -465,10 +486,10 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
             textAnchor="middle"
             fill={CHART_MUTED_INK}
           >
-            {axisTitle(spec, 'x', encodings.x)}
+            {axisTitle(spec, horizontal ? 'y' : 'x', horizontal ? encodings.y[0] ?? null : encodings.x)}
           </text>
         )}
-        {!bare && axisTitle(spec, 'y', encodings.y[0] ?? null) && (
+        {!bare && axisTitle(spec, horizontal ? 'x' : 'y', horizontal ? encodings.x : encodings.y[0] ?? null) && (
           <text
             x={16}
             y={(plot.top + plot.bottom) / 2}
@@ -477,7 +498,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
             fill={CHART_MUTED_INK}
             transform={`rotate(-90 16 ${(plot.top + plot.bottom) / 2})`}
           >
-            {axisTitle(spec, 'y', encodings.y[0] ?? null)}
+            {axisTitle(spec, horizontal ? 'x' : 'y', horizontal ? encodings.x : encodings.y[0] ?? null)}
           </text>
         )}
 
@@ -615,7 +636,23 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                       />
                     </g>
                   ))}
-                {pointLike &&
+                {type === 'bubble' &&
+                  // Largest first, so a small bubble is never hidden under a big one.
+                  [...s.points].sort((a, b) => (b.r ?? 0) - (a.r ?? 0)).map((point, i) => (
+                    <circle
+                      key={`bubble-${i}`}
+                      cx={point.cx}
+                      cy={point.cy}
+                      r={point.r ?? style.pointRadius}
+                      fill={s.color}
+                      fillOpacity={0.55}
+                      stroke="#ffffff"
+                      strokeWidth={1.5}
+                    >
+                      <title>{`${point.name ? `${point.name} · ` : ''}${s.key} · ${point.xLabel}: ${formatValue(point.value)}${bubbleKey ? `, ${bubbleKey.column} ${formatValue(point.size ?? 0)}` : ''}`}</title>
+                    </circle>
+                  ))}
+                {pointLike && type !== 'bubble' &&
                   s.points.map((point, i) => (
                     <g key={`pt-${i}`}>
                       <circle
@@ -641,6 +678,19 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
             <line x1={point.cx - 5} x2={point.cx + 5} y1={point.error!.lowerY} y2={point.error!.lowerY} />
             <line x1={point.cx - 5} x2={point.cx + 5} y1={point.error!.upperY} y2={point.error!.upperY} />
           </g>)}
+          {s.trend?.path && (
+            <path
+              d={s.trend.path}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={style.strokeWidth + 0.5}
+              strokeDasharray="7 5"
+              strokeLinecap="round"
+              data-trend={s.key}
+            >
+              <title>{s.trend.equation ?? ''}</title>
+            </path>
+          )}
 
               </g>
             ))}
@@ -690,7 +740,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                   y={bar.labelY}
                   fontSize={CHART_AXIS_FONT_SIZE}
                   fontWeight={700}
-                  textAnchor="middle"
+                  textAnchor={bar.labelAnchor ?? 'middle'}
                   fill={CHART_MUTED_INK}
                 >
                   {formatValue(bar.value)}
@@ -698,6 +748,59 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
               ))}
             </g>
           ))}
+
+        {/* Bubbles are named beside themselves while there are few enough to read. */}
+        {!bare && type === 'bubble' && zoomLevel === 1 && interactivePoints.length <= 24 && series.map(s => s.points.filter(point => point.name).map((point, i) => (
+          <text
+            key={`bubble-name-${s.key}-${i}`}
+            x={point.cx + (point.r ?? 0) + 4}
+            y={point.cy + 4}
+            fontSize={11}
+            fill={CHART_MUTED_INK}
+            opacity={seriesOpacity(s.key)}
+            pointerEvents="none"
+          >
+            {point.name}
+          </text>
+        )))}
+
+        {/* A trendline never appears without what it explains. */}
+        {!bare && zoomLevel === 1 && series.map(s => s.trend?.end && s.trend.r2 !== null ? (
+          <text
+            key={`trend-${s.key}`}
+            data-trend-label={s.key}
+            x={Math.min(s.trend.end.x, plot.right)}
+            y={Math.max(plot.top + 10, Math.min(plot.bottom - 4, s.trend.end.y - 10))}
+            fontSize={11}
+            fontWeight={600}
+            textAnchor="end"
+            fill={CHART_MUTED_INK}
+            opacity={seriesOpacity(s.key)}
+          >
+            <title>{s.trend.equation ?? ''}</title>
+            {series.length > 1 ? `${s.key} ${r2Label(s.trend.r2)}` : r2Label(s.trend.r2)}
+          </text>
+        ) : null)}
+
+        {/* What a bubble's area means, with two bubbles to read it against. */}
+        {!bare && bubbleKey && (
+          <g aria-label={`Bubble area shows ${bubbleKey.column}`}>
+            <text x={plot.right} y={18} fontSize={CHART_AXIS_FONT_SIZE} textAnchor="end" fill={CHART_MUTED_INK}>
+              {`Area shows ${bubbleKey.column}`}
+            </text>
+            {/* Drawn at the chart's own scale, so the key can be read against
+                the bubbles: round values small enough to fit the header. */}
+            {bubbleKeyValues(bubbleKey).map(({ value, r }, index) => {
+              const x = plot.right - 118 + index * 64
+              return (
+                <g key={index}>
+                  <circle cx={x} cy={48 - r} r={r} fill="none" stroke={CHART_MUTED_INK} strokeWidth={1} />
+                  <text x={x + 18} y={48} fontSize={11} fill={CHART_MUTED_INK}>{formatValue(value)}</text>
+                </g>
+              )
+            })}
+          </g>
+        )}
 
         {brush && (
           <g pointerEvents="none" {...TRANSIENT}>

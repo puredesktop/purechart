@@ -103,7 +103,7 @@ describe('migrateSpec', () => {
 
   it('coerces an unknown chart type to line and a string y to an array', () => {
     const spec = migrateSpec({
-      chart: { type: 'pie', encodings: { x: 'a', y: 'b' } },
+      chart: { type: 'radar', encodings: { x: 'a', y: 'b' } },
     })
     expect(spec.chart.type).toBe('line')
     expect(spec.chart.encodings.y).toEqual(['b'])

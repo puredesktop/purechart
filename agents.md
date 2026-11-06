@@ -172,6 +172,34 @@ explicit direction.
   figure anywhere: a bare column name is ambiguous, and the ambiguity
   travels with the figure.
 
+### Shares, long names, a third measure, trends
+
+- **Pie and donut** show one measure as shares of a whole: `x` names the
+  slices, one `y` sizes them, no `series`. Slices are summed per name,
+  sorted largest first, and never outnumber the palette — the smallest
+  are summed into a grey "Other". Values below zero are refused (a
+  negative share means nothing). Offer a pie only for a few parts of a
+  real total; `suggestChartForms` says when angles cannot tell the parts
+  apart and bars would compare them better. A donut is the same chart
+  with the total written in the middle.
+- **Horizontal bars** (`horizontal-bar`) are bars turned over, for long
+  category names or many categories. Same rules as bars: length from
+  zero, repeated categories need a calculation.
+- **Bubble** is a scatter whose area shows a third numeric column, set
+  with `setChartEncodings` `size`. Area, not radius: four times the value
+  is twice the width. Switching to bubble picks a numeric column the
+  chart is not already plotting; say which one you got.
+- **Trendlines**: `setChartTrendline` with `kind` linear, exponential or
+  polynomial (`degree` 2 or 3) fits each series, or `none` removes it.
+  It replies with each fit's equation and R². The chart always shows the
+  R² beside the line, and so should you: never describe a line with a
+  low R² as a trend. Exponential needs every value above zero.
+  Categories are fitted by position along the axis. Changing to a form
+  that cannot carry a trendline (pie, histogram, stacked or horizontal
+  bars) drops it.
+- Two y-axes are not offered, on purpose: for two measures of different
+  scale, use two charts on the sheet, panels, or index both to 100.
+
 ### Interpreting requests
 
 - "Chart this" picks the fitting type from the data's shape and says
@@ -191,9 +219,10 @@ charts. The working object is the current chart tab: a spec (title,
 type, x/y/series encodings, palette, style options, annotations) over
 an inline data table, autosaved as a `.chart` package (legacy
 `.chart.json` files still open). Chart types: line, area, bar,
-grouped-bar, stacked-bar, scatter, connected-scatter, lollipop,
-slopegraph, histogram — any of which can be split into one panel per
-value of a column, on one shared scale. Style options cover
+grouped-bar, stacked-bar, horizontal-bar, scatter, bubble,
+connected-scatter, lollipop, slopegraph, histogram, pie and donut — any
+of which can be split into one panel per value of a column, on one
+shared scale. Style options cover
 range frame, gridlines, direct labels, rug marks, stroke width, and
 point radius. A chart also carries a caption and axis names, units and
 number formats, all of which travel with the figure into whatever
