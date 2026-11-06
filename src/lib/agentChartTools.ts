@@ -14,6 +14,7 @@ import type {
   ChartType,
 } from './chartSpec'
 import { isChartPaletteId, type ChartPalette } from './chartTheme'
+import { withBubbleSize, withType } from './chartOptions'
 
 export class AgentChartToolError extends Error {
   constructor(message: string) {
@@ -65,6 +66,8 @@ export interface ChartAgentUpdateInput {
   x?: string | null
   y?: string[]
   series?: string | null
+  /** Bubble charts: the numeric column each bubble's area shows. */
+  size?: string | null
   style?: Partial<ChartStyle>
 }
 
@@ -331,6 +334,17 @@ export function updateChartAgentSpec(
   if (input.series !== undefined) {
     ensureColumn(table, input.series, 'series')
     next.chart.encodings.series = input.series
+  }
+
+  if (input.size !== undefined) {
+    try {
+      Object.assign(next, withBubbleSize(next, table, input.size))
+    } catch (error) {
+      throw new AgentChartToolError(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (input.type !== undefined && input.type !== current.chart.type) {
+    Object.assign(next, withType(next, table, next.chart.type))
   }
 
   if (next.chart.encodings.series && next.chart.encodings.y.length > 1) {

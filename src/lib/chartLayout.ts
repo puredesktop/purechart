@@ -15,7 +15,11 @@ import {
 } from 'd3'
 import type { CellValue, ColumnInfo, DataTable } from './dataParse'
 import type { ChartSpec, ChartType } from './chartSpec'
+import { scaleSqrt } from 'd3'
 import { seriesColor } from './chartTheme'
+import { computeHorizontalBarGeometry, computeRadialGeometry } from './chartShapes'
+import { fitTrend, r2Label } from './chartTrend'
+import { isRadialType } from './chartSpec'
 
 export interface ChartDims {
   width: number
@@ -50,6 +54,11 @@ export interface PointGeometry {
   value: number
   error?: { lower: number; upper: number; lowerY: number; upperY: number }
   xLabel: string
+  /** Bubble charts: the drawn radius and the size value it shows. */
+  r?: number
+  size?: number
+  /** Bubble charts: the row's name, from the table's first text column. */
+  name?: string
 }
 
 export interface BarGeometry {
@@ -60,6 +69,47 @@ export interface BarGeometry {
   value: number
   labelX: number
   labelY: number
+  /** Where the value label hangs off its anchor; middle unless set. */
+  labelAnchor?: 'start' | 'middle' | 'end'
+}
+
+/** A fitted trend through one series, in pixels, with what it claims. */
+export interface TrendGeometry {
+  path: string | null
+  /** End of the drawn line, where its R² label sits. */
+  end: { x: number; y: number } | null
+  r2: number | null
+  equation: string | null
+  /** Why no line was drawn, when none was. */
+  error?: string
+}
+
+export interface SliceGeometry {
+  key: string
+  color: string
+  value: number
+  /** 0–1 of the total. */
+  share: number
+  path: string
+  /** Where the percentage sits, just outside the arc. */
+  labelX: number
+  labelY: number
+  labelAnchor: 'start' | 'end'
+  showLabel: boolean
+}
+
+/** Pie and donut: drawn round a centre, keyed by a table beside it. */
+export interface RadialGeometry {
+  cx: number
+  cy: number
+  outer: number
+  inner: number
+  total: number
+  slices: SliceGeometry[]
+  /** Top-left of the key; null in a thumbnail. */
+  key: { x: number; y: number; nameWidth: number } | null
+  /** How many small categories were summed into Other. */
+  folded: number
 }
 
 export interface SeriesGeometry {
@@ -70,6 +120,7 @@ export interface SeriesGeometry {
   points: PointGeometry[]
   bars: BarGeometry[]
   label: { x: number; y: number; text: string } | null
+  trend?: TrendGeometry
 }
 
 export interface ChartGeometry {
@@ -96,6 +147,12 @@ export interface ChartGeometry {
   xPad: number
   /** The data's own y extent, before any forced domain. */
   yExtent: [number, number]
+  /** Set for pie and donut, which have no axes. */
+  radial?: RadialGeometry
+  /** Horizontal bars: categories run down the left, values along the bottom. */
+  orientation?: 'horizontal'
+  /** Bubble charts: what a bubble's area shows, for the size key. */
+  sizeKey?: { column: string; max: number; maxRadius: number }
 }
 
 const DEFAULT_MARGINS: Margins = { top: 58, right: 88, bottom: 48, left: 64 }
@@ -120,7 +177,7 @@ export function extentOf(values: readonly number[]): [number, number] {
   return [lo, hi]
 }
 
-function asNumber(value: CellValue): number | null {
+export function asNumber(value: CellValue): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
   if (value instanceof Date) return value.getTime()
   if (typeof value === 'string' && value.trim() !== '') {
@@ -160,7 +217,7 @@ export function dateCategoryLabel(value: Date, detail: DateDetail = 'day'): stri
   return `${iso.slice(0, 10)} ${iso.slice(11, TIME_END[detail])}`
 }
 
-function asCategory(value: CellValue, detail: DateDetail = 'day'): string | null {
+export function asCategory(value: CellValue, detail: DateDetail = 'day'): string | null {
   if (value === null) return null
   if (value instanceof Date) return dateCategoryLabel(value, detail)
   return String(value)
@@ -180,7 +237,7 @@ function intradayTickLabel(tick: Date, ticks: Date[]): string {
   return detail === 'day' ? utcFormat('%Y-%m-%d')(tick) : dateCategoryLabel(tick, detail)
 }
 
-function emptyGeometry(dims: ChartDims, message: string, refusalReason?: ChartGeometry['refusalReason']): ChartGeometry {
+export function emptyGeometry(dims: ChartDims, message: string, refusalReason?: ChartGeometry['refusalReason']): ChartGeometry {
   return {
     dims,
     plot: plotRectFor(dims, DEFAULT_MARGINS),
@@ -200,7 +257,7 @@ function emptyGeometry(dims: ChartDims, message: string, refusalReason?: ChartGe
   }
 }
 
-function plotRectFor(dims: ChartDims, margins: Margins): PlotRect {
+export function plotRectFor(dims: ChartDims, margins: Margins): PlotRect {
   const left = margins.left
   const top = margins.top
   const width = Math.max(0, dims.width - margins.left - margins.right)
@@ -208,7 +265,7 @@ function plotRectFor(dims: ChartDims, margins: Margins): PlotRect {
   return { left, top, width, height, right: left + width, bottom: top + height }
 }
 
-function truncateLabel(label: string, maxChars: number): string {
+export function truncateLabel(label: string, maxChars: number): string {
   if (label.length <= maxChars) return label
   if (maxChars <= MIN_TRUNCATED_LABEL_LENGTH) return `${label.slice(0, 3)}…`
   return `${label.slice(0, maxChars - 1)}…`
@@ -303,7 +360,7 @@ function readableXTicks(ticks: AxisTick[], plot: PlotRect, moments = false): Axi
   }))
 }
 
-interface SeriesData {
+export interface SeriesData {
   key: string
   values: Array<{ xRaw: CellValue; y: number; row?: DataTable['rows'][number] }>
 }
@@ -358,7 +415,7 @@ export function binSeriesForHistogram(seriesData: SeriesData[], sharedValues?: n
 }
 
 /** Build the per-series data the geometry needs, before pixel mapping. */
-function collectSeries(
+export function collectSeries(
   table: DataTable,
   spec: ChartSpec,
   xCol: ColumnInfo | null,
@@ -507,6 +564,9 @@ export interface GeometryOptions {
   compact?: boolean
 }
 
+/** Forms a fitted trend can honestly be drawn through. */
+export const TRENDABLE: ChartType[] = ['line', 'area', 'scatter', 'bubble', 'connected-scatter', 'bar', 'grouped-bar', 'lollipop']
+
 const COMPACT_MARGINS: Margins = { top: 8, right: 10, bottom: 10, left: 10 }
 
 export function computeChartGeometry(
@@ -525,6 +585,7 @@ export function computeChartGeometry(
   }
 
   if (table.columns.length === 0) return emptyGeometry(dims, 'No data yet.')
+  if (isRadialType(type)) return computeRadialGeometry(table, spec, dims, options)
   // A histogram bins the Y measure itself; it has no x column to choose.
   const histogram = type === 'histogram'
   const xCol = table.columns.find(column => column.name === encodings.x) ?? null
@@ -544,6 +605,19 @@ export function computeChartGeometry(
       'A series column splits one measure. Choose one Y column, or clear the series column.',
     )
   }
+
+  if (type === 'horizontal-bar' && xCol) return computeHorizontalBarGeometry(table, spec, dims, xCol, options)
+
+  // A bubble's area shows a third column. Without one it is a scatter that
+  // claims to be something more.
+  const bubble = type === 'bubble'
+  const sizeColumn = bubble ? table.columns.find(column => column.name === encodings.size && column.type === 'number') ?? null : null
+  if (bubble && !sizeColumn) return emptyGeometry(dims, 'Choose the numeric column each bubble\'s size shows.')
+  const sizeValues = sizeColumn ? table.rows.map(row => asNumber(row[sizeColumn.name])).filter((n): n is number => n !== null) : []
+  if (sizeValues.some(value => value < 0)) return emptyGeometry(dims, 'Bubble sizes are areas, so they must be zero or more.')
+  const maxSize = sizeValues.length ? extentOf(sizeValues)[1] : 0
+  // Which row a bubble is: the first text column that is not the colour.
+  const nameColumn = bubble ? table.columns.find(column => column.type === 'string' && column.name !== encodings.series && column.name !== encodings.x)?.name ?? null : null
 
   const xDetail = options.xDateDetail ?? (xCol?.type === 'date' ? dateDetailOf(table.rows.map(row => row[xCol.name])) : 'day')
   const rawSeries = collectSeries(table, spec, xCol, options.seriesSelection)
@@ -568,6 +642,10 @@ export function computeChartGeometry(
     bottom: baseMargins.bottom + (!options.compact && showLegend && legendPosition === 'bottom' ? seriesCount * 20 : 0),
   })
   const allY = seriesData.flatMap(series => series.values.map(v => v.y))
+  // The largest bubble is kept inside the frame rather than cut by it.
+  const maxRadius = bubble ? Math.max(6, Math.min(40, Math.min(plot.width, plot.height) / 12)) : 0
+  const radiusScale = scaleSqrt().domain([0, maxSize || 1]).range([0, maxRadius])
+  const inset = bubble ? maxRadius : 0
 
   // Stacked bars pile each category's series on top of one another, so the
   // y domain must hold the per-category totals (positive and negative
@@ -598,7 +676,7 @@ export function computeChartGeometry(
   if (yMin > yMax || (yMin === yMax && (axisY.min != null || axisY.max != null)) || (logY && yMin <= 0)) return emptyGeometry(dims, 'Y bounds must increase; logarithmic bounds must be positive.')
   const yScale = (logY ? scaleLog() : scaleLinear())
     .domain([yMin, yMax === yMin ? (logY ? yMin * 10 : yMin + 1) : yMax])
-    .range([plot.bottom, plot.top])
+    .range([plot.bottom - inset, plot.top + inset])
   if (axisY.min == null && axisY.max == null) yScale.nice()
 
   const banded = histogram || (xCol !== null && useBand(type, xCol))
@@ -612,6 +690,10 @@ export function computeChartGeometry(
   let bandwidth = 0
   let xPixelForLabel: (label: string) => number | null
   let xPad = 6
+  // Trendlines are fitted in data units: categories by their position,
+  // dates as milliseconds, numbers as themselves.
+  let trendX: (raw: CellValue) => number | null = raw => asNumber(raw)
+  let trendPixel: (x: number) => number | null = () => null
 
   if (banded) {
     const categories: string[] = binned ? [...binned.categories] : [...options.xCategories ?? []]
@@ -643,6 +725,11 @@ export function computeChartGeometry(
         return at === undefined ? null : at + bandwidth / 2
       }
       xPad = bandwidth / 2
+      trendX = raw => {
+        const at = categories.indexOf(asCategory(raw, xDetail) ?? '')
+        return at < 0 ? null : at
+      }
+      trendPixel = x => (scale(categories[0]!) ?? plot.left) + bandwidth / 2 + x * scale.step()
     } else {
       const scale = scalePoint<string>()
         .domain(categories)
@@ -661,6 +748,11 @@ export function computeChartGeometry(
       }))
       xPixelForLabel = label => scale(label) ?? null
       xPad = scale.step() / 2
+      trendX = raw => {
+        const at = categories.indexOf(asCategory(raw, xDetail) ?? '')
+        return at < 0 ? null : at
+      }
+      trendPixel = x => (scale(categories[0]!) ?? plot.left) + x * scale.step()
     }
     if (!binned && xCol?.type === 'date') {
       // Callers may name a band by the ISO timestamp getChartData shows.
@@ -684,7 +776,7 @@ export function computeChartGeometry(
       const intraday = xDetail !== 'day'
       const scale = (intraday ? scaleUtc() : scaleTime())
         .domain([new Date(xLo), new Date(xHi)])
-        .range([plot.left, plot.right])
+        .range([plot.left + inset, plot.right - inset])
       if (axisX.min == null && axisX.max == null) scale.nice()
       const ticks = scale.ticks(6)
       xPos = raw => {
@@ -694,6 +786,7 @@ export function computeChartGeometry(
       xTicks = ticks.map(d => ({ position: scale(d), label: intraday ? intradayTickLabel(d, ticks) : timeFormat('%Y-%m-%d')(d) }))
       xFrameStart = scale(new Date(xLo))
       xFrameEnd = scale(new Date(xHi))
+      trendPixel = x => scale(new Date(x))
       // Date labels are the ISO day or moment asCategory produced; parse them back.
       xPixelForLabel = label => {
         const at = parseDateLabel(label)
@@ -702,7 +795,7 @@ export function computeChartGeometry(
     } else {
       const scale = (axisX.scale === 'log' ? scaleLog() : scaleLinear())
         .domain([xLo, xHi === xLo ? (axisX.scale === 'log' ? xLo * 10 : xLo + 1) : xHi])
-        .range([plot.left, plot.right])
+        .range([plot.left + inset, plot.right - inset])
       if (axisX.min == null && axisX.max == null) scale.nice()
       xPos = raw => {
         const n = asNumber(raw)
@@ -713,6 +806,7 @@ export function computeChartGeometry(
         .map(v => ({ position: scale(v), label: formatChartNumber(v, spec.chart.axes.x.format) }))
       xFrameStart = scale(xLo)
       xFrameEnd = scale(xHi)
+      trendPixel = x => scale(x)
       xPixelForLabel = label => {
         const n = asNumber(label)
         return n === null ? null : scale(n)
@@ -735,6 +829,36 @@ export function computeChartGeometry(
     .y0(plot.bottom)
     .y1(p => p.cy)
     .curve(curveMonotoneX)
+
+  const trendSpec = spec.chart.presentation?.trendline ?? null
+  const trendable = TRENDABLE.includes(type)
+  const trendFor = (data: SeriesData): TrendGeometry => {
+    const pairs = data.values.flatMap(value => {
+      const x = trendX(value.xRaw)
+      return x === null ? [] : [{ x, y: value.y }]
+    })
+    const fit = fitTrend(pairs, trendSpec!)
+    if ('error' in fit) return { path: null, end: null, r2: null, equation: null, error: fit.error }
+    const [lo, hi] = extentOf(pairs.map(pair => pair.x))
+    const samples: Array<[number, number]> = []
+    const steps = fit.kind === 'linear' ? 1 : 80
+    for (let step = 0; step <= steps; step += 1) {
+      const x = lo + ((hi - lo) * step) / steps
+      const px = trendPixel(x)
+      const py = yScale(fit.predict(x))
+      if (px === null || !Number.isFinite(py)) continue
+      // Clamp a curve that leaves the chart so the path stays drawable; the
+      // clip hides what is outside.
+      samples.push([px, Math.max(plot.top - 400, Math.min(plot.bottom + 400, py))])
+    }
+    const end = samples[samples.length - 1]
+    return {
+      path: samples.length > 1 ? `M${samples.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('L')}` : null,
+      end: end ? { x: end[0], y: end[1] } : null,
+      r2: fit.r2,
+      equation: `${fit.equation} (${r2Label(fit.r2)})`,
+    }
+  }
 
   // Running stack heights per category, shared across series in order.
   const stackAbove = new Map<string, number>()
@@ -791,11 +915,15 @@ export function computeChartGeometry(
       const cy = yScale(value.y)
       const barX = cx + barGap / 2 + slot * (groupedBarWidth + slotGap)
       const barCenter = barLike ? barX + groupedBarWidth / 2 : cx
+      const size = sizeColumn && value.row ? asNumber(value.row[sizeColumn.name]) : null
+      if (bubble && size === null) continue
       points.push({
         cx: barCenter,
         cy,
         value: value.y,
         xLabel,
+        ...(bubble && size !== null ? { size, r: Math.max(2, radiusScale(size)) } : {}),
+        ...(nameColumn && value.row && value.row[nameColumn] != null ? { name: String(value.row[nameColumn]) } : {}),
         ...(errorBars && value.row ? { error: {
           lower: asNumber(value.row[errorBars.lower])!,
           upper: asNumber(value.row[errorBars.upper])!,
@@ -826,7 +954,9 @@ export function computeChartGeometry(
       }
     }
     const last = points[points.length - 1]
+    const trend = trendSpec && trendable ? trendFor(data) : undefined
     return {
+      ...(trend ? { trend } : {}),
       key: data.key,
       color,
       linePath:
@@ -835,8 +965,10 @@ export function computeChartGeometry(
         isLineLike(type) && points.length > 1 ? areaBuilder(points) : null,
       points,
       bars,
+      // A bubble chart's last row is not the end of anything; its one
+      // series is named by the title, several by the legend.
       label:
-        style.directLabels && last
+        style.directLabels && last && !bubble
           ? { x: last.cx + 6, y: last.cy, text: data.key }
           : null,
     }
@@ -858,5 +990,6 @@ export function computeChartGeometry(
     yPixelForValue: value => yScale(value),
     yValueAtPixel: pixel => yScale.invert(pixel),
     xPad,
+    ...(sizeColumn ? { sizeKey: { column: sizeColumn.name, max: maxSize, maxRadius } } : {}),
   }
 }

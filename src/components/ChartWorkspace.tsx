@@ -314,6 +314,15 @@ const StyledChartStage = styled.div`
   flex: 1;
   min-height: 0;
   color: var(--purechart-content-text);
+
+  /* A chart is a figure: its inks and palettes are measured against a light
+     page, and that is the page it is exported on. In a dark desk it keeps
+     that page rather than drawing dark ink on a dark ground. Screen only:
+     exports paint their own ground. */
+  [data-platform-theme='dark'] & svg[role='img'] {
+    background: #fcfcfb;
+    border-radius: var(--pure-chrome-radius, 3px);
+  }
 `
 
 /** The caption sits under the drawing, on the same measure as the drawing. */

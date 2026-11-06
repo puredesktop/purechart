@@ -4,7 +4,10 @@ import { SegmentedControl } from '@purescience/platform-ui/components/common/but
 import { PaletteDropdown } from '@purescience/platform-ui/components/common/inputs/PaletteDropdown'
 import { PlatformIcon } from '@purescience/platform-ui/components/chrome/PlatformIcon'
 import { SidebarSectionLabel } from '@purescience/platform-ui/components/common/containers/AppChrome'
-import { CHART_TYPES } from '../lib/chartSpec'
+import { CHART_TYPES, isRadialType } from '../lib/chartSpec'
+import { TRENDABLE } from '../lib/chartLayout'
+import { withBubbleSize, withTrendline } from '../lib/chartOptions'
+import type { TrendSpec } from '../lib/chartTrend'
 import type { ChartType } from '../lib/chartSpec'
 import { chartPaletteList } from '../lib/chartTheme'
 import type { InteractionMode } from '../lib/chartInteraction'
@@ -269,6 +272,30 @@ const TYPE_LABELS: Record<ChartType, string> = {
   lollipop: 'Lollipop',
   slopegraph: 'Slope',
   histogram: 'Histogram',
+  'horizontal-bar': 'Horizontal bars',
+  pie: 'Pie',
+  donut: 'Donut',
+  bubble: 'Bubble',
+}
+
+const TREND_OPTIONS: SelectOption[] = [
+  { id: 'none', label: 'None' },
+  { id: 'linear', label: 'Straight line' },
+  { id: 'exponential', label: 'Exponential' },
+  { id: 'polynomial-2', label: 'Curve, second degree' },
+  { id: 'polynomial-3', label: 'Curve, third degree' },
+]
+
+function trendId(trend: TrendSpec | null | undefined): string {
+  if (!trend) return 'none'
+  return trend.kind === 'polynomial' ? `polynomial-${trend.degree ?? 2}` : trend.kind
+}
+
+function trendFromId(id: string): TrendSpec | null {
+  if (id === 'linear' || id === 'exponential') return { kind: id }
+  if (id === 'polynomial-2') return { kind: 'polynomial', degree: 2 }
+  if (id === 'polynomial-3') return { kind: 'polynomial', degree: 3 }
+  return null
 }
 
 export function ControlsPanel({
@@ -309,6 +336,10 @@ export function ControlsPanel({
     .map(column => ({ id: column.name, label: column.name }))
 
   const disabled = table.columns.length === 0
+  const type = spec.chart.type
+  const radial = isRadialType(type)
+  const xLabel = radial ? 'Slices' : type === 'horizontal-bar' ? 'Categories' : 'X axis'
+  const trendline = spec.chart.presentation?.trendline ?? null
 
   return (
     <StyledPanel>
@@ -332,7 +363,7 @@ export function ControlsPanel({
       <StyledSection>
         <StyledTitle>Data mapping</StyledTitle>
         <SelectField
-          label="X axis"
+          label={xLabel}
           value={encodings.x}
           options={allColumns}
           disabled={disabled}
@@ -342,7 +373,7 @@ export function ControlsPanel({
           label="Add Y measure"
           value={null}
           options={availableYColumns}
-          disabled={disabled || (!!encodings.series && encodings.y.length > 0)}
+          disabled={disabled || (!!encodings.series && encodings.y.length > 0) || (radial && encodings.y.length > 0)}
           placeholder={
             encodings.y.length > 0 ? 'Add another measure' : 'Choose measure'
           }
@@ -367,19 +398,50 @@ export function ControlsPanel({
             <StyledEmptyMeasures>No Y measures selected</StyledEmptyMeasures>
           )}
         </StyledMeasureList>
-        <SelectField
-          label="Series"
-          value={encodings.series ?? NONE_ID}
-          options={seriesColumns}
-          disabled={disabled || encodings.y.length > 1}
-          onChange={id => session.setSeries(id === NONE_ID ? null : id)}
-        />
-        {encodings.series ? (
+        {type === 'bubble' ? (
+          <SelectField
+            label="Bubble size"
+            value={encodings.size ?? NONE_ID}
+            options={[{ id: NONE_ID, label: 'Choose a column' }, ...numericColumns]}
+            disabled={disabled}
+            onChange={id => session.applyChartSpec(withBubbleSize(spec, table, id === NONE_ID ? null : id), { table })}
+          />
+        ) : null}
+        {!radial ? (
+          <SelectField
+            label={type === 'bubble' ? 'Colour by' : 'Series'}
+            value={encodings.series ?? NONE_ID}
+            options={seriesColumns}
+            disabled={disabled || encodings.y.length > 1}
+            onChange={id => session.setSeries(id === NONE_ID ? null : id)}
+          />
+        ) : null}
+        {radial ? (
+          <StyledHint>One slice per value of {encodings.x ?? 'the slices column'}, sized by {encodings.y[0] ?? 'one measure'}. Small slices past the palette are summed into Other.</StyledHint>
+        ) : type === 'bubble' ? (
+          <StyledHint>A bubble's area, not its width, shows the size column.</StyledHint>
+        ) : encodings.series ? (
           <StyledHint>A series column splits one Y measure. Clear Series to add another measure.</StyledHint>
         ) : encodings.y.length > 1 ? (
           <StyledHint>Choose one Y measure to split it by Series.</StyledHint>
         ) : null}
       </StyledSection>
+
+      {TRENDABLE.includes(type) ? (
+        <StyledSection>
+          <StyledTitle>Trendline</StyledTitle>
+          <SelectField
+            label="Fit"
+            value={trendId(trendline)}
+            options={TREND_OPTIONS}
+            disabled={disabled}
+            onChange={id => session.applyChartSpec(withTrendline(spec, trendFromId(id)), { table })}
+          />
+          <StyledHint>
+            Fitted through each series. The chart shows how much of the variation it explains as R².
+          </StyledHint>
+        </StyledSection>
+      ) : null}
 
       <StyledSection>
         <StyledTitle>Panels</StyledTitle>

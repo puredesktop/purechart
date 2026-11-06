@@ -19,6 +19,7 @@ export async function setChartEncodingsHandler(
     y: readStringArrayArg(args, 'y'),
     series:
       'series' in args ? readAgentToolStringArg(args, 'series') : undefined,
+    size: 'size' in args ? readAgentToolStringArg(args, 'size') : undefined,
   })
   context.applyChartSpec(spec, {
     table: context.table,

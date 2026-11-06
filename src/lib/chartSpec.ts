@@ -23,6 +23,10 @@ export type ChartType =
   | 'lollipop'
   | 'slopegraph'
   | 'histogram'
+  | 'horizontal-bar'
+  | 'pie'
+  | 'donut'
+  | 'bubble'
 
 export const CHART_TYPES: ChartType[] = [
   'line',
@@ -35,7 +39,18 @@ export const CHART_TYPES: ChartType[] = [
   'lollipop',
   'slopegraph',
   'histogram',
+  'horizontal-bar',
+  'pie',
+  'donut',
+  'bubble',
 ]
+
+/** Forms drawn round a centre rather than on two axes. */
+export const RADIAL_CHART_TYPES: ChartType[] = ['pie', 'donut']
+
+export function isRadialType(type: ChartType): boolean {
+  return RADIAL_CHART_TYPES.includes(type)
+}
 
 /**
  * Types earlier builds offered but never drew honestly (both rendered as a
@@ -61,6 +76,11 @@ export interface ChartEncodings {
    * the honest alternative to inventing a colour. 0 keeps them all.
    */
   limitSeries?: number
+  /**
+   * Bubble charts: the numeric column each bubble's AREA shows. Area, not
+   * radius — a bubble twice as wide reads as four times as much.
+   */
+  size?: string | null
 }
 
 /**
@@ -311,6 +331,7 @@ export function migrateSpec(raw: unknown): ChartSpec {
           : asStringArray(encodings.y),
         series: typeof encodings.series === 'string' ? encodings.series : null,
         limitSeries: asSeriesLimit(encodings.limitSeries),
+        ...(typeof encodings.size === 'string' && encodings.size ? { size: encodings.size } : {}),
       },
       style: { ...defaultStyle(), ...sanitizeStyle(style) },
       annotations: sanitizeAnnotations(chart.annotations),
