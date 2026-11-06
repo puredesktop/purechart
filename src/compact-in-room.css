@@ -1,3 +1,12 @@
+/* Follows the desk's theme: each colour is light-dark(its light value, its dark partner), the dark ones the held greys
+   of docs/held-apps.md. A light theme leaves the colour scheme as it was; a dark one says dark, and parts that asked
+   for light take --held-scheme instead. */
+[data-compact-room]:is([data-platform-theme='dark'] *),
+html[data-held-in-room]:has([data-compact-room])[data-platform-theme='dark'] {
+  color-scheme: dark;
+  --held-scheme: dark;
+}
+
 /* Compact PureChart, held inside a page (useCompactInRoom). The frame carries data-compact-room only then, and every rule
    here starts from it, so with compact off nothing in this file applies. Chrome is hidden, not removed: everything stays
    mounted, so the chart, its history and the agent's tools live on. Full app gives it all back. */
@@ -31,10 +40,10 @@
 html[data-held-in-room]:has([data-compact-room]),
 html[data-held-in-room]:has([data-compact-room]) body,
 html[data-held-in-room]:has([data-compact-room]) [data-compact-room] {
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
 }
 html[data-held-in-room]:has([data-compact-room]) [data-compact='root'] {
-  --glass-panel: #ffffff;
+  --glass-panel: light-dark(#ffffff, #1c1c1c);
 }
 html[data-held-in-room]:has([data-compact-room]) [data-compact='area'],
 html[data-held-in-room]:has([data-compact-room]) [data-controls-hidden='true'] [data-compact='area'] {
@@ -49,39 +58,39 @@ html[data-held-in-room]:has([data-compact-room]) [data-compact='frame'] {
    The chart itself is the user's drawing and keeps its colours; only the chrome around it is calmed. Tokens are set on the
    frame itself so they outrank the White appearance's !important values on the page root. */
 [data-compact-room] {
-  --platform-colors-bg: #ffffff;
-  --platform-colors-app-viewport: #ffffff;
-  --platform-colors-surface: #ffffff;
-  --platform-colors-surface-hover: #f5f6f8;
-  --platform-colors-surface-active: #eef0f3;
-  --platform-colors-border: #dde1e7;
-  --platform-colors-border-soft: #dde1e7;
-  --platform-colors-divider: #dde1e7;
-  --glass-panel: #ffffff;
-  --glass-panel-strong: #ffffff;
-  --glass-well: #f5f6f8;
-  --pure-chrome-sidebar: #ffffff;
-  --pure-chrome-well: #f5f6f8;
-  --pure-chrome-hover: #f5f6f8;
-  --pure-chrome-selection: #eef0f3;
-  --pure-chrome-line: #dde1e7;
-  --pure-chrome-fence: #dde1e7;
-  --pure-chrome-accent: #1f3a5f;
-  --pure-chrome-on-accent: #ffffff;
-  background: #ffffff;
+  --platform-colors-bg: light-dark(#ffffff, #1c1c1c);
+  --platform-colors-app-viewport: light-dark(#ffffff, #1c1c1c);
+  --platform-colors-surface: light-dark(#ffffff, #1c1c1c);
+  --platform-colors-surface-hover: light-dark(#f5f6f8, #272727);
+  --platform-colors-surface-active: light-dark(#eef0f3, #2c2c2c);
+  --platform-colors-border: light-dark(#dde1e7, #3a3a3a);
+  --platform-colors-border-soft: light-dark(#dde1e7, #3a3a3a);
+  --platform-colors-divider: light-dark(#dde1e7, #3a3a3a);
+  --glass-panel: light-dark(#ffffff, #1c1c1c);
+  --glass-panel-strong: light-dark(#ffffff, #1c1c1c);
+  --glass-well: light-dark(#f5f6f8, #272727);
+  --pure-chrome-sidebar: light-dark(#ffffff, #1c1c1c);
+  --pure-chrome-well: light-dark(#f5f6f8, #272727);
+  --pure-chrome-hover: light-dark(#f5f6f8, #272727);
+  --pure-chrome-selection: light-dark(#eef0f3, #2c2c2c);
+  --pure-chrome-line: light-dark(#dde1e7, #3a3a3a);
+  --pure-chrome-fence: light-dark(#dde1e7, #3a3a3a);
+  --pure-chrome-accent: light-dark(#1f3a5f, #98b8e5);
+  --pure-chrome-on-accent: light-dark(#ffffff, #1c1c1c);
+  background: light-dark(#ffffff, #1c1c1c);
 }
 html[data-held-in-room]:has([data-compact-room]):not(#_) body {
-  background: #ffffff !important;
+  background: light-dark(#ffffff, #1c1c1c) !important;
 }
 [data-compact-room] [data-compact='root'] {
   --purechart-radius-control: 3px;
   --purechart-radius-panel: 3px;
   --pure-chrome-radius: 3px;
   --pure-chrome-ui-size: 13px;
-  --purechart-border: #cdd1d7;
-  --purechart-border-soft: #dde1e7;
-  --purechart-panel: #ffffff;
-  --purechart-panel-subtle: #ffffff;
+  --purechart-border: light-dark(#cdd1d7, #4a4a4a);
+  --purechart-border-soft: light-dark(#dde1e7, #3a3a3a);
+  --purechart-panel: light-dark(#ffffff, #1c1c1c);
+  --purechart-panel-subtle: light-dark(#ffffff, #1c1c1c);
   --glass-blur: none;
 }
 /* One bar, ruled off from the chart below it. */
@@ -89,10 +98,10 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
   margin: 0;
   padding: 6px 12px;
   border: 0;
-  border-bottom: 1px solid #dde1e7;
+  border-bottom: 1px solid light-dark(#dde1e7, #3a3a3a);
   border-radius: 0;
   box-shadow: none;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -105,14 +114,14 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
   min-height: 28px;
   height: 28px;
   border-radius: 3px;
-  border: 1px solid #cdd1d7;
-  background: #ffffff;
+  border: 1px solid light-dark(#cdd1d7, #4a4a4a);
+  background: light-dark(#ffffff, #1c1c1c);
   box-shadow: none;
   font-size: 12px;
   font-weight: 500;
 }
 [data-compact-room] [data-compact='root'] button[data-chrome='toolbar-select']:hover:not(:disabled) {
-  background: #f5f6f8;
+  background: light-dark(#f5f6f8, #272727);
 }
 [data-compact-room] [data-compact='root'] button[aria-label='Hide controls'],
 [data-compact-room] [data-compact='root'] button[aria-label='Show controls'] {
@@ -124,15 +133,15 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
 /* The controls column: ruled off, its tabs one square segmented control, its fields and buttons 28px with 3px corners. */
 [data-compact-room] [data-compact='root'] [data-chrome='sidebar'] {
   padding-top: 12px;
-  border-right: 1px solid #dde1e7;
-  background: #ffffff;
+  border-right: 1px solid light-dark(#dde1e7, #3a3a3a);
+  background: light-dark(#ffffff, #1c1c1c);
 }
 [data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] {
   padding: 0;
   gap: 0;
-  border: 1px solid #cdd1d7;
+  border: 1px solid light-dark(#cdd1d7, #4a4a4a);
   border-radius: 3px;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
   overflow: hidden;
 }
 [data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button {
@@ -146,12 +155,12 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
   background: transparent;
 }
 [data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button + button {
-  border-left: 1px solid #dde1e7;
+  border-left: 1px solid light-dark(#dde1e7, #3a3a3a);
 }
 [data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button[aria-selected='true'],
 [data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button[aria-current='true'],
 [data-compact-room] [data-compact='root'] nav[aria-label='Editor panels'] button[aria-pressed='true'] {
-  background: #eef0f3;
+  background: light-dark(#eef0f3, #2c2c2c);
   font-weight: 600;
 }
 [data-compact-room] [data-compact='root'] [data-chrome='sidebar'] h2 {
@@ -166,7 +175,7 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
   box-shadow: none;
 }
 [data-compact-room] [data-compact='root'] [data-chrome='sidebar'] textarea {
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
 }
 [data-compact-room] [data-chrome='meta'] {
   font-size: 12px;
@@ -176,5 +185,5 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
 }
