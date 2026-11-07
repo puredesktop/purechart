@@ -147,6 +147,7 @@ const StyledCount = styled.span`
   background: var(--purechart-panel-subtle);
   color: var(--purechart-text);
   letter-spacing: 0;
+  ${enterprise} & { border-radius: 3px; }
 `
 
 const StyledFinding = styled.div<{ $severity: ChartFinding['severity'] }>`

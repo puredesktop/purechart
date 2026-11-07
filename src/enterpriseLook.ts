@@ -1,10 +1,9 @@
 import { createGlobalStyle } from 'styled-components'
 
 /**
- * Pure Server marks the page it serves `<html data-pure-look="enterprise">`;
- * PureDesktop never does. Every rule here, and every `${enterprise} &` block
- * in the components, applies only under that mark, so the desktop app is
- * unchanged. Chrome gets near-square corners, hairlines instead of shadows,
+ * The page is marked `<html data-pure-look="enterprise">`: Pure Server does
+ * it, and main.tsx does it on the desktop too. Every rule here, and every
+ * `${enterprise} &` block in the components, applies under that mark. Chrome gets near-square corners, hairlines instead of shadows,
  * quiet sans labels and neutral selected states; primary actions keep the
  * accent the theme supplies. The chart itself is content and keeps its own
  * palette.

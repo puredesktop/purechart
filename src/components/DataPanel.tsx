@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { parseTable } from '../lib/dataParse'
-import { styled } from 'styled-components'
+import { css, styled } from 'styled-components'
 import {
   MetaText,
   SidebarSectionLabel,
@@ -9,6 +9,7 @@ import type { DataTable } from '../lib/dataParse'
 import type { SheetChart } from '../lib/chartSheet'
 import { chartDataImpact } from '../lib/chartDataImpact'
 import { enterprise } from '../enterpriseLook'
+import { primaryLook, quiet } from '../ui/look'
 
 
 interface DataPanelProps {
@@ -92,7 +93,7 @@ const StyledTitle = styled(SidebarSectionLabel)`
   }
 `
 
-// Load is the sidebar's one primary control: the accent, used once.
+// Apply data is the panel's one main action: the accent, used once.
 const StyledActionButton = styled.button<{ $primary?: boolean }>`
   height: var(--pure-chrome-control-height);
   padding: 0 11px;
@@ -123,6 +124,8 @@ const StyledActionButton = styled.button<{ $primary?: boolean }>`
       color-mix(in srgb, var(--purechart-focus) 34%, transparent);
     outline-offset: 2px;
   }
+
+  ${({ $primary }) => css`${enterprise} && { ${quiet} ${$primary ? primaryLook : ''} }`}
 `
 
 const StyledFileInput = styled.input`
@@ -167,7 +170,6 @@ export function DataPanel({
         <StyledActions>
           <StyledActionButton
             type="button"
-            $primary
             onClick={() => inputRef.current?.click()}
           >
             Import file
