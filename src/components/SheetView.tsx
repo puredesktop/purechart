@@ -265,6 +265,7 @@ const StyledDot = styled.span`
   border-radius: 50%;
   background: var(--pure-success-text, #0ca30c);
   flex-shrink: 0;
+  ${enterprise} & { border-radius: 1px; background: var(--p-done-text); }
 `
 
 const StyledFlag = styled.span<{ $tone: 'blocking' | 'check' }>`
@@ -276,6 +277,12 @@ const StyledFlag = styled.span<{ $tone: 'blocking' | 'check' }>`
     $tone === 'blocking' ? 'var(--pure-danger-muted)' : 'var(--pure-attention-muted)'};
   color: ${({ $tone }) =>
     $tone === 'blocking' ? 'var(--pure-danger-text)' : 'var(--pure-attention-text)'};
+  ${enterprise} & {
+    border-radius: 3px;
+    font-weight: 600;
+    background: ${({ $tone }) => ($tone === 'blocking' ? 'var(--p-failed-text)' : 'var(--b-amber)')};
+    color: ${({ $tone }) => ($tone === 'blocking' ? 'var(--p-failed-on-text)' : 'var(--b-on-amber)')};
+  }
 `
 
 const StyledDrawing = styled.span`

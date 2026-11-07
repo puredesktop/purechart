@@ -40,6 +40,7 @@ import { SecondLookPanel } from './SecondLookPanel'
 import { SheetView } from './SheetView'
 import { TableDrawer } from './TableDrawer'
 import { enterprise } from '../enterpriseLook'
+import { quiet } from '../ui/look'
 
 //#region styled-components
 
@@ -132,7 +133,7 @@ const StyledTabs = styled.nav`
   border: 1px solid var(--purechart-border);
   border-radius: 10px;
   background: var(--purechart-panel-subtle);
-  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); background: var(--n-sheet); }
 `
 
 const StyledTab = styled.button`
@@ -154,8 +155,10 @@ const StyledTab = styled.button`
     font-weight: 600;
   }
   &:focus-visible { outline: 2px solid var(--purechart-focus); outline-offset: 2px; }
-  ${enterprise} & { border-radius: 2px; }
-  ${enterprise} &[aria-pressed='true'] { box-shadow: none; }
+  ${enterprise} & { border-radius: 3px; color: var(--n-soft); }
+  ${enterprise} &:hover:not([aria-pressed='true']) { background: var(--n-hover); color: var(--n-ink); }
+  /* The open tab: the shared selected look (--p-chosen ground, --p-chosen-edge hairline), words ink. */
+  ${enterprise} &[aria-pressed='true'] { border-color: transparent; background: var(--p-chosen); box-shadow: var(--p-chosen-edge); color: var(--n-ink); }
 `
 
 const StyledMain = styled.section`
@@ -172,6 +175,7 @@ const StyledHeader = styled(EditorToolbar)`
   background: var(--glass-panel);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
+  ${enterprise} & { background: var(--n-sheet); backdrop-filter: none; -webkit-backdrop-filter: none; }
   && {
     justify-content: space-between;
     gap: 12px;
@@ -240,7 +244,7 @@ const StyledHeaderActions = styled.div`
 
 const StyledHeaderExportButton = styled(ToolbarSelect)`
   && { min-height: 32px; border-radius: 7px; padding: 0 10px; font-size: 12px; }
-  ${enterprise} && { border-radius: var(--pure-chrome-radius, 3px); }
+  ${enterprise} && { ${quiet} }
   cursor: pointer;
 
   &:hover:not(:disabled) {
@@ -270,6 +274,7 @@ const StyledPanelToggle = styled(StyledHeaderExportButton)`
     width: 32px;
     padding: 0;
   }
+  ${enterprise} &&& { width: 28px; padding: 0; }
 `
 
 const StyledCanvasArea = styled.div`
