@@ -284,3 +284,9 @@ computed findings for a grounded caption. Free-form claims and causal explanatio
 still require human review; annotation target validation is not semantic fact checking.
 
 Copies of this app can run side by side (a tab and one held inside a page). They merge each other's work on one document chart by chart, so a change made in the other copy can appear while you work; read the chart again before replacing something you read earlier.
+
+## Reads that also save something
+
+These tools are declared `read`, and an agent with read access, thinking mode and evaluations treat them as reads. Each also saves something small on the way, which should move out of the read path (tool risk audit, unit 1 follow-up):
+
+- `openChart`: adds the chart's path to PureChart's recent files, in the app's settings.
