@@ -878,7 +878,7 @@
         },
         {
           "name": "exportChart",
-          "risk": "external",
+          "risk": "write",
           "description": "Render the chart to SVG or PNG. Renders from the spec, so it works whether or not the chart is on screen. Without a destination the file lands in the chart document's own assets/figures folder (a never-saved chart gets its draft package first). With one, it lands in that folder instead — how a figure is placed into a deck, a report or a manuscript rather than left where only this chart can find it. Give width/height for the size the page needs, and scale for print. The result names the path.",
           "inputSchema": {
             "type": "object",
