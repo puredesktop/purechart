@@ -1,12 +1,12 @@
 import { dsvFormat } from 'd3'
-import { delimiterFor, detectDelimiter, parseTable, type ColumnType, type DataFormat, type DataTable } from './dataParse'
+import { delimiterFor, detectDelimiter, parseData, type ColumnType, type DataFormat, type DataTable } from './dataParse'
 import type { ChartSheet } from './chartSheet'
 
 export interface DataGrid { columns: string[]; rows: string[][] }
 export type DataEdit =
   | { kind: 'type'; column: number; type: ColumnType | 'auto' }
   | { kind: 'cell'; row: number; column: number; value: string }
-  | { kind: 'paste'; row: number; column: number; text: string }
+  | { kind: 'paste'; row: number; column: number; text: string; expandColumns?: boolean }
   | { kind: 'rename'; column: number; name: string }
   | { kind: 'insert-row'; row: number }
   | { kind: 'remove-row'; row: number }
@@ -65,7 +65,16 @@ export function editGrid(source: DataGrid, edit: DataEdit): DataGrid {
     case 'paste': {
       validRow(edit.row, true); validColumn(edit.column)
       const block = dsvFormat(edit.text.includes('\t') ? '\t' : detectDelimiter(edit.text)).parseRows(edit.text.replace(/\r?\n$/, ''))
-      if (block.some(row => edit.column + row.length > columns.length)) throw new Error('Paste exceeds the available columns. Add columns first.')
+      const neededColumns = block.reduce((max, row) => Math.max(max, edit.column + row.length), columns.length)
+      if (neededColumns > columns.length) {
+        if (!edit.expandColumns) throw new Error('Paste exceeds the available columns. Add columns first.')
+        while (columns.length < neededColumns) {
+          let index = columns.length + 1
+          while (columns.includes(`Column ${index}`)) index += 1
+          columns.push(`Column ${index}`)
+          rows.forEach(row => row.push(''))
+        }
+      }
       block.forEach((row, i) => {
         const target = edit.row + i
         while (rows.length <= target) rows.push(columns.map(() => ''))
@@ -101,7 +110,13 @@ export function editSheetData(sheet: ChartSheet, table: DataTable, edit: DataEdi
       const c = entry.spec.chart
       const rename = (name: string | null) => name === old ? replacement : name
       return { ...entry, spec: { ...entry.spec, chart: { ...c,
-        encodings: { ...c.encodings, x: rename(c.encodings.x), y: c.encodings.y.flatMap(name => rename(name) ?? []), series: rename(c.encodings.series) },
+        encodings: {
+          ...c.encodings,
+          x: rename(c.encodings.x),
+          y: c.encodings.y.flatMap(name => rename(name) ?? []),
+          series: rename(c.encodings.series),
+          ...(c.encodings.size !== undefined ? { size: rename(c.encodings.size) } : {}),
+        },
         facet: { ...c.facet, column: rename(c.facet.column) },
         ...(c.presentation?.errorBars ? { presentation: { ...c.presentation, errorBars: rename(c.presentation.errorBars.lower) && rename(c.presentation.errorBars.upper) ? { lower: rename(c.presentation.errorBars.lower)!, upper: rename(c.presentation.errorBars.upper)! } : null } } : {}),
         ...(c.transform ? { transform: { ...c.transform,
@@ -111,5 +126,5 @@ export function editSheetData(sheet: ChartSheet, table: DataTable, edit: DataEdi
       } } }
     })
   }
-  return { sheet: { ...sheet, charts, data: { mode: 'inline', inline: { format: 'csv', text }, columnTypes } }, table: parseTable(text, columnTypes) }
+  return { sheet: { ...sheet, charts, data: { mode: 'inline', inline: { format: 'csv', text }, columnTypes } }, table: parseData(text, 'csv', columnTypes) }
 }

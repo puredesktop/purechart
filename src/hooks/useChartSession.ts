@@ -1,13 +1,14 @@
 import { withType } from '../lib/chartOptions'
 import { createChartProposal, proposalBase, type ChartProposal, type ChartProposalInput } from '../lib/chartProposal'
-import type { ChartTransform } from '../lib/chartTransform'
+import { defaultTransform, type ChartTransform } from '../lib/chartTransform'
 import { editSheetData, type DataEdit } from '../lib/dataEditing'
 import { ChartHistory } from '../lib/chartHistory'
 import { applyForm, suggestForms } from '../lib/chartForms'
 import { paletteCapacity } from '../lib/chartTheme'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { registerPlatformAppObject } from '@purescience/platform-ui/bridge/documents'
-import { CHART_APP_SLUG } from '../constants'
+import { CHART_APP_SLUG, CHART_PACKAGE_CONTENT_FILE } from '../constants'
+import { stampRevision } from './useSharedDocument'
 import {
   deleteFile,
   readTextFile,
@@ -23,6 +24,8 @@ import {
   figureFingerprint,
   figureSourcePath,
   forgetFigure as forgetFigureRecord,
+  isSafeCollectionPath,
+  isSafeRelativePath,
   orphanFigures,
   parseFigures,
   recordFigure,
@@ -40,7 +43,7 @@ import {
   chartTitleFromPath,
   relativeChartDocumentPath,
 } from '../lib/chartPaths'
-import { EMPTY_TABLE, parseData, parseTable } from '../lib/dataParse'
+import { EMPTY_TABLE, parseData } from '../lib/dataParse'
 import type { DataTable } from '../lib/dataParse'
 import {
   chartPackageFiles,
@@ -78,6 +81,7 @@ import type { ChartAppSettings, ResourceOpenEvent } from '../types'
 
 interface UseChartSessionArgs {
   beforeOpen?: () => Promise<void>
+  onSaveAs?: (path: string, sheet: ChartSheet, revision: string | null) => void
   ready: boolean
   appSettings: ChartAppSettings
   resource: ResourceOpenEvent | null
@@ -180,6 +184,7 @@ export interface ChartSession {
   addY: (column: string) => void
   removeY: (column: string) => void
   setSeries: (column: string | null) => void
+  setLimitSeries: (limit: number) => void
   toggleStyle: (key: ChartStyleToggle) => void
   /** Numeric style options (stroke width, point radius). */
   setStyle: (
@@ -235,7 +240,9 @@ async function materializeTable(spec: ChartSpec): Promise<DataTable> {
     const text = await readTextFile(spec.data.source.path)
     return parseData(text, spec.data.source.format, spec.data.columnTypes)
   }
-  if (spec.data.inline?.text) return parseTable(spec.data.inline.text, spec.data.columnTypes)
+  if (spec.data.inline?.text) {
+    return parseData(spec.data.inline.text, spec.data.inline.format, spec.data.columnTypes)
+  }
   return EMPTY_TABLE
 }
 
@@ -306,9 +313,12 @@ export function useChartSession({
   resource,
   onResourceHandled,
   beforeOpen,
+  onSaveAs,
 }: UseChartSessionArgs): ChartSession {
   const beforeOpenRef = useRef(beforeOpen)
   beforeOpenRef.current = beforeOpen
+  const onSaveAsRef = useRef(onSaveAs)
+  onSaveAsRef.current = onSaveAs
   const [sheet, setSheet] = useState<ChartSheet>(() => emptySheet())
   // Every existing reader wants one chart, so the focused chart is served as a
   // whole spec with the sheet's shared data and palette folded back in.
@@ -605,9 +615,18 @@ export function useChartSession({
   const showMergedSheet = useCallback(
     (next: ChartSheet) => {
       const sameData = JSON.stringify(next.data) === JSON.stringify(liveSheetRef.current.data)
+      const generation = ++loadGeneration.current
       applySheet(next)
       if (sameData) return
-      void materializeTable(specForChart(next, null)).then(applyTable).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
+      void materializeTable(specForChart(next, null))
+        .then(nextTable => {
+          if (generation !== loadGeneration.current) return
+          applyTable(nextTable)
+        })
+        .catch(cause => {
+          if (generation !== loadGeneration.current) return
+          setError(cause instanceof Error ? cause.message : String(cause))
+        })
     },
     [applySheet, applyTable],
   )
@@ -655,19 +674,22 @@ export function useChartSession({
       loadGeneration.current += 1
       const format = detectInlineFormat(text)
       const columnTypes = liveSheetRef.current.data.columnTypes
-      const nextTable = parseTable(text, columnTypes)
+      const nextTable = parseData(text, format, columnTypes)
       updateSpec(current => {
         const next: ChartSpec = {
           ...current,
           data: { mode: 'inline', inline: { format, text }, columnTypes },
         }
         const enc = current.chart.encodings
-        const has = (name: string | null): boolean =>
-          name === null || nextTable.columns.some(column => column.name === name)
+        const has = (name: string | null | undefined): boolean =>
+          name == null || nextTable.columns.some(column => column.name === name)
         // Encodings the new table cannot honour are not encodings: keeping
         // them leaves a blank stage and a chart that quietly says nothing.
         const stillFits =
-          has(enc.x) && enc.y.every(name => has(name)) && has(enc.series)
+          has(enc.x) &&
+          enc.y.every(name => has(name)) &&
+          has(enc.series) &&
+          has(enc.size)
         if (options?.resetChart || !enc.x || !enc.y.length || !stillFits) {
           const candidate = suggestForms(nextTable, {
             paletteCapacity: paletteCapacity(current.chart.style.palette, current.chart.style.customPalettes),
@@ -786,6 +808,13 @@ export function useChartSession({
         return
       }
       patchEncodings({ series: column })
+    },
+    [patchEncodings],
+  )
+  const setLimitSeries = useCallback(
+    (limit: number) => {
+      const safe = Number.isFinite(limit) && limit > 0 ? Math.min(24, Math.round(limit)) : 0
+      patchEncodings({ limitSeries: safe })
     },
     [patchEncodings],
   )
@@ -954,20 +983,32 @@ export function useChartSession({
     async (path: string) => {
       const clean = path.trim().replace(/\/+$/, '')
       const snapshot = liveSheetRef.current
+      let savedRevision: string | null = null
       if (isChartPackagePath(clean)) {
         for (const file of sheetPackageFiles(snapshot)) {
-          await writeTextFile(`${clean}/${file.name}`, file.content)
+          if (file.name === CHART_PACKAGE_CONTENT_FILE) {
+            const stamped = stampRevision(file.content)
+            savedRevision = stamped.revision
+            await writeTextFile(`${clean}/${file.name}`, stamped.text)
+          } else {
+            await writeTextFile(`${clean}/${file.name}`, file.content)
+          }
         }
         await registerPlatformAppObject({ appSlug: CHART_APP_SLUG, path: clean })
       } else {
         await writeTextFile(clean, serializeSheet(snapshot))
       }
+      loadedSheetRef.current = snapshot
+      // Adopt the new binding and sync the agreed revision before updating
+      // documentPath so the lifecycle neither flushes the old path nor hits a
+      // spurious save conflict on the next autosave.
+      onSaveAsRef.current?.(clean, snapshot, savedRevision)
       setDocumentPath(clean)
       rememberPath(clean)
       setError(null)
       setStatus(`Saved ${fileNameFromPath(clean)}`)
     },
-    [rememberPath, spec],
+    [rememberPath, setDocumentPath],
   )
 
   const deleteChartDocument = useCallback(
@@ -975,11 +1016,12 @@ export function useChartSession({
       const clean = path.trim().replace(/\/+$/, '')
       // A `.chart` package is a folder; it only goes with `recursive`.
       await deleteFile(clean, isChartPackagePath(clean))
-      if (documentPath === clean) setDocumentPath(null)
+      const current = documentPathRef.current?.trim().replace(/\/+$/, '') ?? null
+      if (current === clean) setDocumentPath(null)
       setError(null)
       setStatus(`Deleted ${fileNameFromPath(clean)}`)
     },
-    [documentPath],
+    [setDocumentPath],
   )
 
   // The chart to draw: the one on screen, or the one a figure names; in its
@@ -993,8 +1035,14 @@ export function useChartSession({
   // Where the file goes: a fresh path from the title, or the file a figure
   // already is when it is being redrawn in place.
   const outputFor = (base: string, title: string, ext: 'svg' | 'png', options?: ChartExportOptions) => {
-    if (!options?.relativePath) return assetExportPathForChart(base, title, ext)
     const collectionPath = base.replace(/\/+$/, '')
+    if (!isSafeCollectionPath(collectionPath)) {
+      throw new Error('Invalid figure collection path.')
+    }
+    if (!options?.relativePath) return assetExportPathForChart(base, title, ext)
+    if (!isSafeRelativePath(options.relativePath)) {
+      throw new Error('Invalid figure relative path.')
+    }
     return { collectionPath, relativePath: options.relativePath, absolutePath: `${collectionPath}/${options.relativePath}` }
   }
 
@@ -1087,8 +1135,8 @@ export function useChartSession({
         setStatus(`Downloaded ${fileName} + copied embed`)
         return { kind: 'download', fileName }
       }
-      const output = outputFor(base, snapshot.title, 'svg', options)
       try {
+        const output = outputFor(base, snapshot.title, 'svg', options)
         await writeBinaryFile(output.absolutePath, toUtf8Bytes(svgString))
         const linked = await registerFigure(output, base, snapshot.title, 'svg', drawn, options)
         setStatus(
@@ -1247,7 +1295,27 @@ export function useChartSession({
     showMergedSheet,
     liveSheet: () => liveSheetRef.current,
     liveDocumentPath: () => documentPathRef.current,
-    setTransform: transform => updateSpec(current => ({ ...current, chart: { ...current.chart, transform, axes: { ...current.chart.axes, y: { ...current.chart.axes.y, format: transform.aggregate === 'percent' ? 'percent' : current.chart.axes.y.format } } } })),
+    setTransform: transform =>
+      updateSpec(current => {
+        const prevAggregate = (current.chart.transform ?? defaultTransform(current)).aggregate
+        const yFormat =
+          transform.aggregate === 'percent'
+            ? 'percent'
+            : prevAggregate === 'percent' && current.chart.axes.y.format === 'percent'
+              ? 'plain'
+              : current.chart.axes.y.format
+        return {
+          ...current,
+          chart: {
+            ...current.chart,
+            transform,
+            axes: {
+              ...current.chart.axes,
+              y: { ...current.chart.axes.y, format: yFormat },
+            },
+          },
+        }
+      }),
     editData,
     canUndo: history.current.canUndo,
     canRedo: history.current.canRedo,
@@ -1276,6 +1344,7 @@ export function useChartSession({
     addY,
     removeY,
     setSeries,
+    setLimitSeries,
     toggleStyle,
     setStyle,
     setPalette,

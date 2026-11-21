@@ -96,7 +96,8 @@ export function parseDelimited(text: string, delimiter?: string, types: ColumnTy
   const delim = delimiter ?? detectDelimiter(trimmed)
   // Positional parsing avoids d3's object conversion losing __proto__ fields.
   const [names = [], ...rawRows] = dsvFormat(delim).parseRows(trimmed)
-  if (names.some(name => !name.trim()) || new Set(names).size !== names.length) throw new Error('Each column needs a unique, non-empty heading.')
+  const trimmedNames = names.map(name => name.trim())
+  if (trimmedNames.some(name => !name) || new Set(trimmedNames).size !== trimmedNames.length) throw new Error('Each column needs a unique, non-empty heading.')
   if (rawRows.some(row => row.length > names.length)) throw new Error('A data row has more cells than the header. Check delimiters and quoting.')
   const columns: ColumnInfo[] = names.map((name, index) => ({
     name,

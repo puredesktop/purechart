@@ -14,6 +14,28 @@ export interface MergeOptions {
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const same = (a: unknown, b: unknown): boolean => a === b || JSON.stringify(a) === JSON.stringify(b)
 const plainId = (item: unknown): string | null => (isRecord(item) && typeof item.id === 'string' ? item.id : null)
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+const ownValue = (obj: Record<string, unknown>, key: string): unknown => (Object.hasOwn(obj, key) ? obj[key] : undefined)
+
+function stripDangerousKeys<V>(value: V): V {
+  if (Array.isArray(value)) {
+    return value.map(item => stripDangerousKeys(item)) as unknown as V
+  }
+  if (isRecord(value)) {
+    const clean: Record<string, unknown> = {}
+    for (const key of Object.keys(value)) {
+      if (DANGEROUS_KEYS.has(key)) continue
+      Object.defineProperty(clean, key, {
+        value: stripDangerousKeys(ownValue(value, key)),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      })
+    }
+    return clean as V
+  }
+  return value
+}
 
 export function threeWayMerge<T>(base: T, local: T, remote: T, options: MergeOptions = {}): T {
   const idOf = options.idOf ?? plainId
@@ -27,7 +49,7 @@ export function threeWayMerge<T>(base: T, local: T, remote: T, options: MergeOpt
       if (here !== undefined && there !== undefined) return merge(was, here, there, path)
       // On one side only. Added there, or taken away by the other: taken away only if this side did not change it since.
       const only = here ?? there
-      return was !== undefined && same(was, only) ? undefined : only
+      return was !== undefined && same(was, only) ? undefined : stripDangerousKeys(only)
     }
     const result: unknown[] = []
     for (const item of l) {
@@ -49,18 +71,26 @@ export function threeWayMerge<T>(base: T, local: T, remote: T, options: MergeOpt
   }
 
   const merge = (b: unknown, l: unknown, r: unknown, path: string): unknown => {
-    if (own.has(path)) return l
+    if (own.has(path)) return stripDangerousKeys(l)
     const holdsOwn = isRecord(l) && isRecord(r) && [...own].some(field => path === '' || field.startsWith(`${path}.`))
     if (!holdsOwn) {
-      if (same(l, r) || same(b, r)) return l
-      if (same(b, l)) return r
+      if (same(l, r) || same(b, r)) return stripDangerousKeys(l)
+      if (same(b, l)) return stripDangerousKeys(r)
     }
     if (isRecord(l) && isRecord(r)) {
       const was = isRecord(b) ? b : {}
       const result: Record<string, unknown> = {}
       for (const key of new Set([...Object.keys(l), ...Object.keys(r)])) {
-        const value = merge(was[key], l[key], r[key], path ? `${path}.${key}` : key)
-        if (value !== undefined) result[key] = value
+        if (DANGEROUS_KEYS.has(key)) continue
+        const value = merge(ownValue(was, key), ownValue(l, key), ownValue(r, key), path ? `${path}.${key}` : key)
+        if (value !== undefined) {
+          Object.defineProperty(result, key, {
+            value,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          })
+        }
       }
       return result
     }
@@ -68,7 +98,7 @@ export function threeWayMerge<T>(base: T, local: T, remote: T, options: MergeOpt
       const was = Array.isArray(b) ? b : []
       if ([...was, ...l, ...r].every(item => idOf(item) !== null)) return mergeList(was, l, r, path)
     }
-    return l
+    return stripDangerousKeys(l)
   }
   return merge(base, local, remote, '') as T
 }

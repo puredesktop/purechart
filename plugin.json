@@ -257,6 +257,10 @@
               "size": {
                 "type": "string",
                 "description": "Bubble charts: the numeric column each bubble's AREA shows. Omit to keep; null clears it."
+              },
+              "limitSeries": {
+                "type": "number",
+                "description": "Keep only the largest N series and fold the rest into Other. 0 keeps all series."
               }
             }
           },
@@ -384,6 +388,10 @@
               "size": {
                 "type": "string",
                 "description": "Bubble charts: the numeric column each bubble's area shows."
+              },
+              "limitSeries": {
+                "type": "number",
+                "description": "Keep only the largest N series and fold the rest into Other. 0 keeps all series."
               }
             }
           },
@@ -438,6 +446,15 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "size": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "limitSeries": {
+                    "type": "number"
                   },
                   "style": {
                     "type": "object",
@@ -718,7 +735,7 @@
         {
           "name": "replaceChartData",
           "risk": "destructive",
-          "description": "Replace the current chart's inline data with CSV, TSV, or JSON table text, keeping the spec (title, type, style, annotations). Encodings are re-suggested only when resetChart is true or the current x column is unset.",
+          "description": "Replace the current chart's inline data with CSV, TSV, or JSON table text, keeping the spec (title, type, style, annotations). Encodings are re-suggested when resetChart is true, the current x column is unset, or any referenced encoding column disappears from the new data.",
           "inputSchema": {
             "type": "object",
             "properties": {

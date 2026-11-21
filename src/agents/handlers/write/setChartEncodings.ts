@@ -14,12 +14,21 @@ export async function setChartEncodingsHandler(
   context: ChartAgentToolContext,
   { arguments: args }: AgentToolInvokeContext,
 ): Promise<AgentToolHandlerResult> {
+  const limitSeries =
+    'limitSeries' in args && args.limitSeries !== undefined
+      ? args.limitSeries === null
+        ? 0
+        : typeof args.limitSeries === 'number'
+          ? args.limitSeries
+          : Number.NaN
+      : undefined
   const spec = updateChartAgentSpec(context.spec, context.table, {
     x: 'x' in args ? readAgentToolStringArg(args, 'x') : undefined,
     y: readStringArrayArg(args, 'y'),
     series:
       'series' in args ? readAgentToolStringArg(args, 'series') : undefined,
     size: 'size' in args ? readAgentToolStringArg(args, 'size') : undefined,
+    limitSeries,
   })
   context.applyChartSpec(spec, {
     table: context.table,

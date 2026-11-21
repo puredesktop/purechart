@@ -55,8 +55,8 @@ export interface ChartReview {
 }
 
 /** The forms that put every series beside every other, not just its neighbours. */
-const ALL_PAIRS_FORMS: ChartType[] = ['scatter', 'connected-scatter']
-const BAR_FORMS: ChartType[] = ['bar', 'grouped-bar', 'stacked-bar', 'histogram']
+const ALL_PAIRS_FORMS: ChartType[] = ['scatter', 'connected-scatter', 'bubble']
+const BAR_FORMS: ChartType[] = ['bar', 'grouped-bar', 'stacked-bar', 'histogram', 'horizontal-bar']
 
 /** The surface a chart is drawn on, which contrast is measured against. */
 export const CHART_SURFACE = '#fcfcfb'
@@ -89,6 +89,12 @@ function isMonochrome(spec: ChartSpec): boolean {
  * either, and the chart is claiming to show more than it can distinguish.
  */
 function unnamedSeries(geometry: ChartGeometry): string[] {
+  if (geometry.radial && geometry.radial.folded > 0) {
+    const otherKey = geometry.radial.slices[geometry.radial.slices.length - 1]?.key
+    return geometry.series
+      .filter(series => series.color === CHART_OVERFLOW_INK && series.key !== otherKey)
+      .map(series => series.key)
+  }
   return geometry.series
     .filter(series => series.color === CHART_OVERFLOW_INK)
     .map(series => series.key)
@@ -160,6 +166,7 @@ export function reviewChart(
   const unnamed = unnamedSeries(drawn)
   if (unnamed.length > 0) {
     const capacity = paletteSize(spec)
+    const keepCount = Math.max(1, capacity - 1)
     findings.push({
       id: 'colour-overflow',
       severity: 'blocking',
@@ -174,8 +181,8 @@ export function reviewChart(
         {
           // One slot is spent on "Other", so the fold has to leave room for it.
           kind: 'keep-series',
-          label: `Keep the largest ${capacity - 1}, fold the rest into Other`,
-          count: capacity - 1,
+          label: `Keep the largest ${keepCount}, fold the rest into Other`,
+          count: keepCount,
         },
       ],
     })
@@ -292,10 +299,16 @@ export function reviewChart(
 
   // --- bars that do not start at zero ---------------------------------------
   if (BAR_FORMS.includes(type)) {
-    const top = drawn.yValueAtPixel(drawn.plot.top)
-    const bottom = drawn.yValueAtPixel(drawn.plot.bottom)
-    const low = Math.min(top, bottom)
-    const high = Math.max(top, bottom)
+    const start =
+      drawn.orientation === 'horizontal'
+        ? drawn.yValueAtPixel(drawn.plot.left)
+        : drawn.yValueAtPixel(drawn.plot.bottom)
+    const end =
+      drawn.orientation === 'horizontal'
+        ? drawn.yValueAtPixel(drawn.plot.right)
+        : drawn.yValueAtPixel(drawn.plot.top)
+    const low = Math.min(start, end)
+    const high = Math.max(start, end)
     if (low > 0.0001 || high < -0.0001) {
       findings.push({
         id: 'bars-truncated',

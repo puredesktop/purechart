@@ -408,13 +408,39 @@ export function ControlsPanel({
           />
         ) : null}
         {!radial ? (
-          <SelectField
-            label={type === 'bubble' ? 'Colour by' : 'Series'}
-            value={encodings.series ?? NONE_ID}
-            options={seriesColumns}
-            disabled={disabled || encodings.y.length > 1}
-            onChange={id => session.setSeries(id === NONE_ID ? null : id)}
-          />
+          <>
+            <SelectField
+              label={type === 'bubble' ? 'Colour by' : 'Series'}
+              value={encodings.series ?? NONE_ID}
+              options={seriesColumns}
+              disabled={disabled || encodings.y.length > 1}
+              onChange={id => session.setSeries(id === NONE_ID ? null : id)}
+            />
+            <StyledNumberField>
+              Top N series (+ Other)
+              <StyledNumberInput
+                aria-label="Top N series (+ Other)"
+                type="number"
+                min={0}
+                max={24}
+                step={1}
+                placeholder="All"
+                value={encodings.limitSeries ? String(encodings.limitSeries) : ''}
+                disabled={disabled}
+                onChange={event => {
+                  const raw = event.target.value.trim()
+                  if (raw === '') {
+                    session.setLimitSeries(0)
+                    return
+                  }
+                  const value = Number(raw)
+                  if (Number.isFinite(value) && value >= 0) {
+                    session.setLimitSeries(Math.min(24, Math.round(value)))
+                  }
+                }}
+              />
+            </StyledNumberField>
+          </>
         ) : null}
         {radial ? (
           <StyledHint>One slice per value of {encodings.x ?? 'the slices column'}, sized by {encodings.y[0] ?? 'one measure'}. Small slices past the palette are summed into Other.</StyledHint>
@@ -573,6 +599,16 @@ export function ControlsPanel({
           </StyledAxisField>
         </StyledAxisRow>
         <StyledAxisRow>
+          <StyledAxisField>
+            <StyledAxisLabel htmlFor="axis-x-unit">X unit</StyledAxisLabel>
+            <StyledAxisInput
+              id="axis-x-unit"
+              value={spec.chart.axes.x.unit ?? ''}
+              placeholder="years, km, °C"
+              disabled={disabled}
+              onChange={event => session.setAxis('x', { unit: event.target.value || null })}
+            />
+          </StyledAxisField>
           <StyledAxisField>
             <StyledAxisLabel htmlFor="axis-y-unit">Y unit</StyledAxisLabel>
             <StyledAxisInput

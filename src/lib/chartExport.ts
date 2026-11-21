@@ -1,4 +1,5 @@
 import { CHART_FONT_FAMILY } from './chartTheme'
+import type { DataTable } from './dataParse'
 
 /**
  * Marks SVG nodes that belong to the live exploration state — hover
@@ -108,4 +109,44 @@ export async function svgToPngBytes(
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+const FORMULA_PREFIX_RE = /^(?:[\t\r\n]|[\s\uFEFF]*[=+\-@])/
+
+/**
+ * Format one CSV cell with RFC 4180 quoting and spreadsheet formula-injection
+ * neutralization (`=`, `+`, `-`, `@`, `\t`, `\r` prefixed with `'`).
+ * Finite numeric values remain unquoted numbers so numeric columns round-trip.
+ */
+export function escapeCsvCell(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
+  let text = String(value)
+  if (FORMULA_PREFIX_RE.test(text)) text = `'${text}`
+  if (/[",\r\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`
+  return text
+}
+
+/** Serialize a DataTable as RFC 4180 CSV with formula-injection escaping. */
+export function serializeTableCsv(table: DataTable): string {
+  if (table.columns.length === 0) return ''
+  const header = table.columns.map(column => escapeCsvCell(column.name)).join(',')
+  const rows = table.rows.map(row =>
+    table.columns.map(column => escapeCsvCell(row[column.name])).join(','),
+  )
+  return `${[header, ...rows].join('\n')}\n`
+}
+
+/** Serialize a DataTable as a JSON array of records (Dates as ISO strings). */
+export function serializeTableJson(table: DataTable): string {
+  const records = table.rows.map(row => {
+    const out: Record<string, unknown> = {}
+    for (const column of table.columns) {
+      const value = row[column.name]
+      out[column.name] = value instanceof Date ? value.toISOString() : value
+    }
+    return out
+  })
+  return `${JSON.stringify(records, null, 2)}\n`
 }

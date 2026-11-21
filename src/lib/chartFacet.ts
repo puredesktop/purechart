@@ -1,5 +1,5 @@
 import { transformChartData } from './chartTransform'
-import { chartSeriesSelection, computeChartGeometry, dateCategoryLabel, dateDetailOf, extentOf, type ChartDims, type ChartGeometry } from './chartLayout'
+import { asNumber, chartSeriesSelection, computeChartGeometry, dateCategoryLabel, dateDetailOf, extentOf, type ChartDims, type ChartGeometry } from './chartLayout'
 import type { ChartSpec } from './chartSpec'
 import type { DataTable } from './dataParse'
 
@@ -140,7 +140,7 @@ export function facetLayout(
   const xValues = xName ? table.rows.map(row => row[xName]).filter(value => value !== null) : []
   const xDateDetail = dateDetailOf(xValues)
   const xCategories = [...new Set(xValues.map(value => value instanceof Date ? dateCategoryLabel(value, xDateDetail) : String(value)))]
-  const numbers = xValues.map(value => value instanceof Date ? value.getTime() : typeof value === 'number' ? value : Number(value)).filter(Number.isFinite)
+  const numbers = xValues.map(asNumber).filter((value): value is number => value !== null)
   const histogramValues = spec.chart.type === 'histogram' ? table.rows.flatMap(row => spec.chart.encodings.y.map(name => row[name])).filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) : undefined
   const sharedOptions = {
     compact: options.compact, xCategories, xDateDetail, histogramValues,
@@ -153,9 +153,10 @@ export function facetLayout(
     value,
     table: subsetFor(table, column, value),
   }))
-  const extents = subsets.map(
-    entry => computeChartGeometry(entry.table, panelSpec, panelDims, sharedOptions).yExtent,
-  ).filter(extent => spec.chart.axes.y.scale !== 'log' || extent[0] > 0)
+  const extents = subsets
+    .map(entry => computeChartGeometry(entry.table, panelSpec, panelDims, sharedOptions))
+    .filter(geometry => !geometry.empty && (spec.chart.axes.y.scale !== 'log' || geometry.yExtent[0] > 0))
+    .map(geometry => geometry.yExtent)
   // Rejected log panels return [0, 0], not a usable scale extent. Keep their
   // refusal local rather than letting that placeholder invalidate every panel.
   const yDomain: [number, number] = extents.length ? [

@@ -68,6 +68,8 @@ export interface ChartAgentUpdateInput {
   series?: string | null
   /** Bubble charts: the numeric column each bubble's area shows. */
   size?: string | null
+  /** Keep only the largest N series and fold the rest into "Other". 0 keeps all. */
+  limitSeries?: number
   style?: Partial<ChartStyle>
 }
 
@@ -124,10 +126,10 @@ function sanitizeStylePatch(
   if (typeof patch.directLabels === 'boolean')
     next.directLabels = patch.directLabels
   if (typeof patch.rug === 'boolean') next.rug = patch.rug
-  if (typeof patch.strokeWidth === 'number' && patch.strokeWidth > 0) {
+  if (typeof patch.strokeWidth === 'number' && Number.isFinite(patch.strokeWidth) && patch.strokeWidth > 0) {
     next.strokeWidth = patch.strokeWidth
   }
-  if (typeof patch.pointRadius === 'number' && patch.pointRadius >= 0) {
+  if (typeof patch.pointRadius === 'number' && Number.isFinite(patch.pointRadius) && patch.pointRadius >= 0) {
     next.pointRadius = patch.pointRadius
   }
   if (
@@ -156,6 +158,7 @@ function sanitizeAgentPalette(input: ChartAgentPaletteInput): ChartPalette {
   const label = input.label?.trim() || 'Agent palette'
   const colors = Array.isArray(input.colors)
     ? input.colors
+        .filter((color): color is string => typeof color === 'string')
         .map(color => color.trim())
         .filter(color => /^#[0-9a-f]{6}$/i.test(color))
     : []
@@ -248,7 +251,11 @@ export function getChartAgentData(
   table: DataTable,
   limit = DEFAULT_ROW_LIMIT,
 ): ChartAgentDataSnapshot {
-  const safeLimit = Math.max(0, Math.min(MAX_ROW_LIMIT, Math.floor(limit)))
+  const finiteLimit =
+    typeof limit === 'number' && Number.isFinite(limit)
+      ? limit
+      : DEFAULT_ROW_LIMIT
+  const safeLimit = Math.max(0, Math.min(MAX_ROW_LIMIT, Math.floor(finiteLimit)))
   return {
     ...getChartAgentDataSummary(spec, table),
     rows: table.rows.slice(0, safeLimit).map(serializeRow),
@@ -292,7 +299,16 @@ export function replaceChartDataAgentSpec(
     ...current,
     data: { mode: 'inline', inline: { format, text: input.dataText } },
   }
-  if (input.resetChart || !current.chart.encodings.x) {
+  const enc = current.chart.encodings
+  const has = (name: string | null | undefined): boolean =>
+    name == null || table.columns.some(column => column.name === name)
+  const stillFits =
+    has(enc.x) &&
+    enc.y.length > 0 &&
+    enc.y.every(name => has(name)) &&
+    has(enc.series) &&
+    has(enc.size)
+  if (input.resetChart || !enc.x || !stillFits) {
     spec.chart = {
       ...current.chart,
       encodings: suggestEncodings(table),
@@ -334,6 +350,18 @@ export function updateChartAgentSpec(
   if (input.series !== undefined) {
     ensureColumn(table, input.series, 'series')
     next.chart.encodings.series = input.series
+  }
+  if (input.limitSeries !== undefined) {
+    if (
+      typeof input.limitSeries !== 'number' ||
+      !Number.isFinite(input.limitSeries) ||
+      input.limitSeries < 0
+    ) {
+      throw new AgentChartToolError(
+        'limitSeries must be a non-negative number (0 keeps all series).',
+      )
+    }
+    next.chart.encodings.limitSeries = Math.min(24, Math.round(input.limitSeries))
   }
 
   if (input.size !== undefined) {

@@ -5,7 +5,6 @@ import type {
 } from '@purescience/platform-ui/bridge/react/usePlatformAgentTools'
 import { AgentChartToolError } from '../../../lib/agentChartTools'
 import { chartFindings } from '../../../lib/chartFindings'
-import { readAgentToolStringArg } from '../args'
 import type { ChartAgentToolContext } from '../../context'
 
 /**
@@ -20,12 +19,12 @@ export async function setChartCaptionHandler(
   context: ChartAgentToolContext,
   { arguments: args }: AgentToolInvokeContext,
 ): Promise<AgentToolHandlerResult> {
-  const caption = readAgentToolStringArg(args, 'caption')
-  if (caption === undefined || caption === null) {
+  if (!('caption' in args) || typeof args.caption !== 'string') {
     throw new AgentChartToolError(
       'Pass the caption. An empty string clears it.',
     )
   }
+  const caption = args.caption.trim()
   const spec = {
     ...context.spec,
     chart: { ...context.spec.chart, caption },

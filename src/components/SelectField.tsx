@@ -141,22 +141,82 @@ export function SelectField({
   onChange,
 }: SelectFieldProps): React.ReactElement {
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
+  optionRefs.current.length = options.length
+  const latestSelectRef = useRef({ options, value })
+  latestSelectRef.current = { options, value }
   const [open, setOpen] = useState(false)
   const current = options.find(option => option.id === value)
   const isDisabled = disabled || options.length === 0
 
-  const close = useCallback(() => setOpen(false), [])
+  const close = useCallback((restoreFocus = false) => {
+    setOpen(false)
+    if (restoreFocus) {
+      queueMicrotask(() => triggerRef.current?.focus())
+    }
+  }, [])
+
+  const focusOptionAt = useCallback(
+    (index: number) => {
+      const count = latestSelectRef.current.options.length
+      if (count === 0) return
+      const wrapped = ((index % count) + count) % count
+      optionRefs.current[wrapped]?.focus()
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!open) return
+    const { options: currentOptions, value: currentValue } = latestSelectRef.current
+    const selectedIndex = currentOptions.findIndex(option => option.id === currentValue)
+    const initial = selectedIndex >= 0 ? selectedIndex : 0
+    queueMicrotask(() => optionRefs.current[initial]?.focus())
+  }, [open])
 
   useEffect(() => {
     if (!open) return
 
     const onPointerDown = (event: MouseEvent): void => {
       if (isMenuInteractionTarget(event.target)) return
-      close()
+      close(false)
     }
 
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') close()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        close(true)
+        return
+      }
+      if (event.key === 'Tab') {
+        close(false)
+        return
+      }
+      if (
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'Home' ||
+        event.key === 'End'
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (options.length === 0) return
+        const activeIndex = optionRefs.current.findIndex(
+          node => node === document.activeElement,
+        )
+        const currentIndex =
+          activeIndex >= 0
+            ? activeIndex
+            : Math.max(
+                0,
+                options.findIndex(option => option.id === value),
+              )
+        if (event.key === 'ArrowDown') focusOptionAt(currentIndex + 1)
+        else if (event.key === 'ArrowUp') focusOptionAt(currentIndex - 1)
+        else if (event.key === 'Home') focusOptionAt(0)
+        else if (event.key === 'End') focusOptionAt(options.length - 1)
+      }
     }
 
     document.addEventListener('mousedown', onPointerDown)
@@ -165,11 +225,11 @@ export function SelectField({
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [close, open])
+  }, [close, focusOptionAt, open, options, value])
 
   const handleSelect = (id: string): void => {
     onChange(id)
-    close()
+    close(true)
   }
 
   return (
@@ -184,6 +244,13 @@ export function SelectField({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(currentOpen => !currentOpen)}
+        onKeyDown={event => {
+          if (isDisabled) return
+          if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+            event.preventDefault()
+            setOpen(true)
+          }
+        }}
       >
         <StyledValue>{current?.label ?? placeholder}</StyledValue>
         <StyledCaret aria-hidden="true">
@@ -199,9 +266,12 @@ export function SelectField({
         data-platform-menu-surface
       >
         <StyledPanel role="menu" aria-label={label}>
-          {options.map(option => (
+          {options.map((option, index) => (
             <StyledOption
               key={option.id}
+              ref={node => {
+                optionRefs.current[index] = node
+              }}
               type="button"
               role="menuitemradio"
               aria-checked={option.id === value}

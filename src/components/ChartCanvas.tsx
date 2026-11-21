@@ -1,8 +1,9 @@
 import { scaleLinear } from 'd3'
-import { forwardRef, useEffect, useId, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, WheelEvent } from 'react'
 import { annotationXPixel, annotationPoint } from '../lib/chartAnnotationValidation'
 import type { ChartGeometry } from '../lib/chartLayout'
+import { formatChartNumber } from '../lib/chartPresentation'
 import type { ChartAnnotation, ChartSpec } from '../lib/chartSpec'
 import {
   annotationFromBrush,
@@ -36,12 +37,23 @@ const TRANSIENT = { [CHART_TRANSIENT_ATTR]: '' } as const
 
 const RUG_TICK = 6
 
+export interface ZoomDomain {
+  x?: [number, number]
+  y?: [number, number]
+}
+
 interface ChartCanvasProps {
   geometry: ChartGeometry
   spec: ChartSpec
   interactionMode: InteractionMode
   resetToken: number
   onAddAnnotation: (annotation: ChartAnnotation) => void
+  /** Identifies the active chart so switching charts resets stale transient state. */
+  chartKey?: string | null
+  /** Active domain-level zoom bounds, when zoomed. */
+  zoomDomain?: ZoomDomain | null
+  onZoomDomainChange?: (domain: ZoomDomain | null) => void
+  onVisualZoomChange?: (zoomLevel: number) => void
   /**
    * Draw the marks and the axes, and nothing else.
    *
@@ -72,6 +84,9 @@ function axisTitle(
 
 /** Two round sizes whose bubbles fit a 28px header, at the chart's scale. */
 function bubbleKeyValues(key: { max: number; maxRadius: number }): Array<{ value: number; r: number }> {
+  if (!Number.isFinite(key.max) || key.max <= 0 || !Number.isFinite(key.maxRadius) || key.maxRadius <= 0) {
+    return []
+  }
   const bound = key.max * Math.min(1, (12 / key.maxRadius) ** 2)
   const ticks = scaleLinear().domain([0, bound]).ticks(3).filter(tick => tick > 0 && tick <= bound)
   const large = ticks[ticks.length - 1] ?? bound
@@ -83,6 +98,12 @@ function formatValue(value: number): string {
   return Number.isInteger(value)
     ? String(value)
     : value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
+function formatAxisValue(value: number, spec: ChartSpec): string {
+  const { format, unit } = spec.chart.axes.y
+  const formatted = format === 'plain' ? formatValue(value) : formatChartNumber(value, format)
+  return unit ? `${formatted} ${unit}` : formatted
 }
 
 function isLineLike(type: ChartSpec['chart']['type']): boolean {
@@ -127,7 +148,18 @@ function pointerPosition(
  */
 export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
   function ChartCanvas(
-    { geometry, spec, interactionMode, resetToken, onAddAnnotation, bare = false },
+    {
+      geometry,
+      spec,
+      interactionMode,
+      resetToken,
+      onAddAnnotation,
+      chartKey,
+      zoomDomain = null,
+      onZoomDomainChange,
+      onVisualZoomChange,
+      bare = false,
+    },
     ref,
   ) {
     const { dims, plot, xTicks, yTicks, xFrame, yFrame, series } = geometry
@@ -144,6 +176,9 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
     const [brush, setBrush] = useState<BrushRange | null>(null)
     const [focusedSeries, setFocusedSeries] = useState<string | null>(null)
     const [zoomLevel, setZoomLevel] = useState(1)
+    const suppressNextClickRef = useRef(false)
+    const onVisualZoomChangeRef = useRef(onVisualZoomChange)
+    onVisualZoomChangeRef.current = onVisualZoomChange
     /**
      * One clip per chart.
      *
@@ -156,7 +191,8 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
     const instanceId = useId().replace(/:/g, '')
     const clipId = `purechart-plot-clip-${instanceId}`
     const marksClipId = `purechart-marks-clip-${instanceId}`
-    const edgePadding = zoomLevel === 1 ? Math.max(style.pointRadius + 8, style.strokeWidth + 3) : 0
+    const isZoomed = zoomLevel > 1 || Boolean(zoomDomain)
+    const edgePadding = isZoomed ? 0 : Math.max(style.pointRadius + 8, style.strokeWidth + 3)
     const shadowId = `purechart-mark-shadow-${instanceId}`
 
     useEffect(() => {
@@ -166,7 +202,12 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
       setBrush(null)
       setFocusedSeries(null)
       setZoomLevel(1)
-    }, [resetToken])
+      suppressNextClickRef.current = false
+    }, [resetToken, chartKey])
+
+    useEffect(() => {
+      onVisualZoomChangeRef.current?.(zoomLevel)
+    }, [zoomLevel])
 
     const interactivePoints = useMemo(
       () =>
@@ -191,8 +232,31 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
     const xAxisEnd = style.rangeFrame ? xFrame.end : plot.right
     const yAxisStart = style.rangeFrame ? yFrame.start : plot.bottom
     const yAxisEnd = style.rangeFrame ? yFrame.end : plot.top
-    const tooltipWidth = 204
-    const tooltipHeight = pinned.length > 1 ? 82 : 76
+    const bubbleKey = geometry.sizeKey
+    const tooltipTitle = activePoint
+      ? activePoint.name
+        ? `${activePoint.name} · ${activePoint.seriesKey}`
+        : activePoint.seriesKey
+      : ''
+    const tooltipSubtitle = activePoint
+      ? `${activePoint.xLabel} · ${formatAxisValue(activePoint.value, spec)}`
+      : ''
+    const tooltipSizeLine =
+      activePoint && type === 'bubble' && bubbleKey && activePoint.size !== undefined
+        ? `${bubbleKey.column}: ${formatValue(activePoint.size)}`
+        : null
+    const tooltipHint = 'double-click to annotate'
+    const longestTooltipChars = Math.max(
+      tooltipTitle.length,
+      tooltipSubtitle.length,
+      tooltipSizeLine?.length ?? 0,
+      tooltipHint.length,
+    )
+    const tooltipWidth = Math.min(
+      Math.max(188, Math.round(longestTooltipChars * 7.2 + 28)),
+      Math.max(188, dims.width - 16),
+    )
+    const tooltipHeight = tooltipSizeLine ? 96 : pinned.length > 1 ? 82 : 76
     const tooltipX = activePoint
       ? Math.min(
           Math.max(plot.left + 6, activePoint.cx + 14),
@@ -213,6 +277,8 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
       setBrush(null)
       setFocusedSeries(null)
       setZoomLevel(1)
+      suppressNextClickRef.current = false
+      onZoomDomainChange?.(null)
     }
 
     function handlePointerMove(event: MouseEvent<SVGRectElement>): void {
@@ -226,6 +292,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
     }
 
     function handlePointerDown(event: MouseEvent<SVGRectElement>): void {
+      suppressNextClickRef.current = false
       if (interactionMode !== 'explore') return
       setBrushStart(pointerPosition(event, dims.width, dims.height))
       setBrush(null)
@@ -237,11 +304,19 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
         return
       }
       const tooSmall = brush.x1 - brush.x0 < 8 && brush.y1 - brush.y0 < 8
-      if (tooSmall) setBrush(null)
+      if (tooSmall) {
+        setBrush(null)
+      } else {
+        suppressNextClickRef.current = true
+      }
       setBrushStart(null)
     }
 
     function handlePointClick(event: MouseEvent<SVGRectElement>): void {
+      if (suppressNextClickRef.current) {
+        suppressNextClickRef.current = false
+        return
+      }
       if (brushStart) return
       const pos = pointerPosition(event, dims.width, dims.height)
       const nextPinned = nearestPoint(interactivePoints, pos.x, pos.y)
@@ -284,12 +359,83 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
     }
 
     function handleKeyDown(event: KeyboardEvent<SVGSVGElement>): void {
-      if (event.key === 'Escape') clearTransientSelection()
+      if (event.key === 'Escape') {
+        const hasTransient = Boolean(
+          hover ||
+            pinned.length > 0 ||
+            brush ||
+            brushStart ||
+            focusedSeries ||
+            zoomLevel > 1 ||
+            zoomDomain,
+        )
+        if (hasTransient) {
+          event.preventDefault()
+          event.stopPropagation()
+          clearTransientSelection()
+        }
+      }
     }
 
     function handleWheel(event: WheelEvent<SVGRectElement>): void {
-      if (interactionMode !== 'explore') return
+      if (interactionMode !== 'explore' || event.deltaY === 0) return
       event.preventDefault()
+      const supportsDomainZoom =
+        Boolean(onZoomDomainChange) &&
+        !geometry.radial &&
+        !geometry.orientation &&
+        !barLike &&
+        spec.chart.axes.y.scale !== 'log' &&
+        spec.chart.axes.y.min == null &&
+        spec.chart.axes.y.max == null
+      if (supportsDomainZoom && onZoomDomainChange) {
+        const rawPos = pointerPosition(event, dims.width, dims.height)
+        const pos = {
+          x: Number.isFinite(rawPos.x) ? rawPos.x : plot.left + plot.width / 2,
+          y: Number.isFinite(rawPos.y) ? rawPos.y : plot.top + plot.height / 2,
+        }
+        const factor = event.deltaY < 0 ? 0.8 : 1.25
+        const inset = geometry.sizeKey?.maxRadius ?? 0
+        const curYMin = geometry.yValueAtPixel(plot.bottom - inset)
+        const curYMax = geometry.yValueAtPixel(plot.top + inset)
+        const anchorY = geometry.yValueAtPixel(pos.y)
+        const nextY: [number, number] = [
+          anchorY - (anchorY - curYMin) * factor,
+          anchorY + (curYMax - anchorY) * factor,
+        ]
+        const fullYSpan = Math.max(1e-9, geometry.yExtent[1] - geometry.yExtent[0])
+        let nextX: [number, number] | undefined
+        let resetX = true
+        if (
+          geometry.xValueAtPixel &&
+          geometry.xExtent &&
+          spec.chart.axes.x.scale !== 'log' &&
+          spec.chart.axes.x.min == null &&
+          spec.chart.axes.x.max == null
+        ) {
+          const curXMin = geometry.xValueAtPixel(plot.left + inset)
+          const curXMax = geometry.xValueAtPixel(plot.right - inset)
+          const anchorX = geometry.xValueAtPixel(pos.x)
+          if (curXMin !== null && curXMax !== null && anchorX !== null) {
+            nextX = [
+              anchorX - (anchorX - curXMin) * factor,
+              anchorX + (curXMax - anchorX) * factor,
+            ]
+            const fullXSpan = Math.max(1e-9, geometry.xExtent[1] - geometry.xExtent[0])
+            resetX = nextX[1] - nextX[0] >= fullXSpan * 0.99
+          }
+        }
+        const resetY = nextY[1] - nextY[0] >= fullYSpan * 0.99
+        if (factor > 1 && resetY && resetX) {
+          onZoomDomainChange(null)
+        } else if (nextY[1] > nextY[0] && (!nextX || nextX[1] > nextX[0])) {
+          onZoomDomainChange({
+            ...(nextX ? { x: nextX } : {}),
+            y: nextY,
+          })
+        }
+        return
+      }
       const delta = event.deltaY < 0 ? 0.12 : -0.12
       setZoomLevel(current => Math.min(3, Math.max(1, current + delta)))
     }
@@ -319,7 +465,6 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
       return <RadialFigure ref={ref} radial={geometry.radial} spec={spec} width={dims.width} height={dims.height} bare={bare} />
     }
     const horizontal = geometry.orientation === 'horizontal'
-    const bubbleKey = geometry.sizeKey
 
     return (
       <svg
@@ -391,7 +536,17 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
             </g>
           })}
         <g clipPath={`url(#${clipId})`}>
-          {!horizontal && spec.chart.presentation?.references.map(reference => {
+          {spec.chart.presentation?.references.map(reference => {
+            if (horizontal) {
+              if (reference.axis !== 'y') return null
+              const x = geometry.yPixelForValue(reference.value)
+              if (!Number.isFinite(x)) return null
+              return <g key={reference.id} aria-label={`Reference: ${reference.label}`}>
+                <line x1={x} x2={x} y1={plot.top} y2={plot.bottom}
+                  stroke={CHART_MUTED_INK} strokeWidth={1.5} strokeDasharray="6 4" />
+                <text x={x + 5} y={plot.top + 14} fontSize={11} fill={CHART_INK}>{reference.label}</text>
+              </g>
+            }
             const y = geometry.yPixelForValue(reference.value)
             const x = geometry.xPixelForLabel(String(reference.value))
             if (reference.axis === 'x' && x === null) return null
@@ -406,18 +561,31 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
         </g>
 
         {style.grid &&
-          yTicks.map((tick, i) => (
-            <line
-              key={`grid-${i}`}
-              x1={plot.left}
-              x2={plot.right}
-              y1={tick.position}
-              y2={tick.position}
-              stroke={CHART_FAINT}
-              strokeWidth={1}
-              strokeDasharray="2 6"
-            />
-          ))}
+          (horizontal
+            ? xTicks.map((tick, i) => (
+                <line
+                  key={`grid-${i}`}
+                  x1={tick.position}
+                  x2={tick.position}
+                  y1={plot.top}
+                  y2={plot.bottom}
+                  stroke={CHART_FAINT}
+                  strokeWidth={1}
+                  strokeDasharray="2 6"
+                />
+              ))
+            : yTicks.map((tick, i) => (
+                <line
+                  key={`grid-${i}`}
+                  x1={plot.left}
+                  x2={plot.right}
+                  y1={tick.position}
+                  y2={tick.position}
+                  stroke={CHART_FAINT}
+                  strokeWidth={1}
+                  strokeDasharray="2 6"
+                />
+              )))}
 
         <line
           x1={xAxisStart}
@@ -697,7 +865,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
           </g>
         </g>
 
-        {!bare && !barLike && zoomLevel === 1 && series.map(s => {
+        {!bare && !barLike && (spec.chart.presentation?.legend ?? 'auto') !== 'right' && !isZoomed && series.map(s => {
           const label = s.label
           if (!label || label.x - 6 < plot.left || label.x - 6 > plot.right || label.y < plot.top || label.y > plot.bottom) return null
           const width = Math.max(20, geometry.dims.width - label.x - 12)
@@ -743,7 +911,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                   textAnchor={bar.labelAnchor ?? 'middle'}
                   fill={CHART_MUTED_INK}
                 >
-                  {formatValue(bar.value)}
+                  {formatAxisValue(bar.value, spec)}
                 </text>
               ))}
             </g>
@@ -1012,7 +1180,7 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                 fontWeight={700}
                 fill={CHART_INK}
               >
-                {activePoint.seriesKey}
+                {tooltipTitle}
               </text>
               <text
                 x={14}
@@ -1020,10 +1188,20 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
                 fontSize={CHART_AXIS_FONT_SIZE}
                 fill={CHART_MUTED_INK}
               >
-                {activePoint.xLabel} · {formatValue(activePoint.value)}
+                {tooltipSubtitle}
               </text>
-              <text x={14} y={68} fontSize={10} fill={CHART_MUTED_INK}>
-                double-click to annotate
+              {tooltipSizeLine ? (
+                <text
+                  x={14}
+                  y={66}
+                  fontSize={CHART_AXIS_FONT_SIZE}
+                  fill={CHART_MUTED_INK}
+                >
+                  {tooltipSizeLine}
+                </text>
+              ) : null}
+              <text x={14} y={tooltipSizeLine ? 86 : 68} fontSize={10} fill={CHART_MUTED_INK}>
+                {tooltipHint}
               </text>
             </g>
           </g>
@@ -1061,24 +1239,38 @@ export const ChartCanvas = forwardRef<SVGSVGElement, ChartCanvasProps>(
               fontSize={CHART_AXIS_FONT_SIZE}
               fill={CHART_MUTED_INK}
             >
-              min {formatValue(brushSummary.min)} · max{' '}
-              {formatValue(brushSummary.max)} · avg{' '}
-              {formatValue(brushSummary.average)}
+              min {formatAxisValue(brushSummary.min, spec)} · max{' '}
+              {formatAxisValue(brushSummary.max, spec)} · avg{' '}
+              {formatAxisValue(brushSummary.average, spec)}
             </text>
           </g>
         )}
 
-        {interactionMode === 'explore' && zoomLevel > 1 && (
-          <text
+        {isZoomed && (
+          <g
             {...TRANSIENT}
-            x={plot.right}
-            y={24}
-            textAnchor="end"
-            fontSize={CHART_AXIS_FONT_SIZE}
-            fill={CHART_MUTED_INK}
+            role="button"
+            tabIndex={0}
+            aria-label="Reset zoom"
+            onClick={clearTransientSelection}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                clearTransientSelection()
+              }
+            }}
+            style={{ cursor: 'pointer' }}
           >
-            zoom {zoomLevel.toFixed(1)}x
-          </text>
+            <text
+              x={plot.right}
+              y={24}
+              textAnchor="end"
+              fontSize={CHART_AXIS_FONT_SIZE}
+              fill={CHART_MUTED_INK}
+            >
+              {zoomLevel > 1 ? `zoom ${zoomLevel.toFixed(1)}x · Reset zoom` : 'Zoomed · Reset zoom'}
+            </text>
+          </g>
         )}
       </svg>
     )

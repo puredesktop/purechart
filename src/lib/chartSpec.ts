@@ -289,6 +289,36 @@ function asStringArray(value: unknown): string[] {
   return []
 }
 
+export function sanitizeData(value: unknown): ChartData {
+  const base = defaultSpec().data
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return base
+  const data = value as Record<string, any>
+  return {
+    mode: data.mode === 'reference' ? 'reference' : 'inline',
+    ...(data.columnTypes && typeof data.columnTypes === 'object' && !Array.isArray(data.columnTypes)
+      ? {
+          columnTypes: Object.fromEntries(
+            Object.entries(data.columnTypes).filter(
+              ([, type]) => type === 'number' || type === 'date' || type === 'string',
+            ),
+          ) as ColumnTypes,
+        }
+      : {}),
+    inline: data.inline && typeof data.inline === 'object'
+      ? {
+          format: asDataFormat(data.inline.format),
+          text: typeof data.inline.text === 'string' ? data.inline.text : '',
+        }
+      : base.inline,
+    source: data.source && typeof data.source === 'object'
+      ? {
+          path: String(data.source.path ?? ''),
+          format: asDataFormat(data.source.format),
+        }
+      : undefined,
+  }
+}
+
 /** Forward-only normalization: fill missing fields with defaults; never crash on partial input. */
 export function migrateSpec(raw: unknown): ChartSpec {
   const base = defaultSpec()
@@ -298,27 +328,11 @@ export function migrateSpec(raw: unknown): ChartSpec {
   const chart = (input.chart ?? {}) as Record<string, any>
   const encodings = (chart.encodings ?? {}) as Record<string, any>
   const style = (chart.style ?? {}) as Record<string, any>
-  const data = (input.data ?? {}) as Record<string, any>
 
   return {
     schemaVersion: CHART_SCHEMA_VERSION,
     title: typeof input.title === 'string' ? input.title : base.title,
-    data: {
-      mode: data.mode === 'reference' ? 'reference' : 'inline',
-      ...(data.columnTypes && typeof data.columnTypes === 'object' ? { columnTypes: Object.fromEntries(Object.entries(data.columnTypes).filter(([, type]) => type === 'number' || type === 'date' || type === 'string')) as ColumnTypes } : {}),
-      inline: data.inline
-        ? {
-            format: asDataFormat(data.inline.format),
-            text: typeof data.inline.text === 'string' ? data.inline.text : '',
-          }
-        : base.data.inline,
-      source: data.source
-        ? {
-            path: String(data.source.path ?? ''),
-            format: asDataFormat(data.source.format),
-          }
-        : undefined,
-    },
+    data: sanitizeData(input.data),
     chart: {
       type: asChartType(chart.type),
       ...(sanitizePresentation(chart.presentation) ? { presentation: sanitizePresentation(chart.presentation) } : {}),
@@ -480,7 +494,7 @@ function sanitizeStyle(style: Record<string, any>): Partial<ChartStyle> {
   return result
 }
 
-function sanitizeCustomPalettes(value: unknown): ChartPalette[] {
+export function sanitizeCustomPalettes(value: unknown): ChartPalette[] {
   if (!Array.isArray(value)) return []
   return value
     .map((item): ChartPalette | null => {
