@@ -8,6 +8,7 @@ import {
 import type { DataTable } from '../lib/dataParse'
 import type { SheetChart } from '../lib/chartSheet'
 import { chartDataImpact } from '../lib/chartDataImpact'
+import { SAMPLE_DATASETS } from '../lib/sampleDatasets'
 import { enterprise } from '../enterpriseLook'
 import { primaryLook, quiet } from '../ui/look'
 
@@ -151,8 +152,8 @@ export function DataPanel({
     try {
       const parsed = parseTable(draft)
       if (!parsed.rows.length) throw new Error('Add a header row and at least one row of data.')
-      if (!parsed.columns.some(column => column.type === 'number')) throw new Error('Include at least one numeric column to chart.')
-      if (parsed.columns.some(column => !column.name.trim()) || new Set(parsed.columns.map(column => column.name)).size !== parsed.columns.length) throw new Error('Give each column a unique, non-empty heading.')
+      const trimmedNames = parsed.columns.map(column => column.name.trim())
+      if (trimmedNames.some(name => !name) || new Set(trimmedNames).size !== trimmedNames.length) throw new Error('Give each column a unique, non-empty heading.')
       onPasteText(draft)
       setError('')
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
@@ -195,6 +196,23 @@ export function DataPanel({
         }}
       />
       <MetaText>Paste a table from a spreadsheet, or import CSV, TSV, or JSON. Data is shared by every chart in this document.</MetaText>
+      <StyledMeta aria-label="Sample datasets">
+        {SAMPLE_DATASETS.map(sample => (
+          <StyledActionButton
+            key={sample.id}
+            type="button"
+            title={sample.description}
+            onClick={() => {
+              importGeneration.current += 1
+              setDraft(sample.csv)
+              setError('')
+              onPasteText(sample.csv, { resetChart: true })
+            }}
+          >
+            {sample.label}
+          </StyledActionButton>
+        ))}
+      </StyledMeta>
       <StyledTextarea
         aria-label="Chart data"
         placeholder="Paste CSV, TSV, or JSON here…"
@@ -220,8 +238,15 @@ export function DataPanel({
         <MetaText>Import preview · {preview.rows.length} rows · {preview.columns.length} columns</MetaText>
         <table aria-label="Import preview" style={{ fontSize: 11, borderCollapse: 'collapse', width: '100%' }}>
           <thead><tr>{preview.columns.slice(0, 4).map((column, i) => <th key={i} style={{ textAlign: 'left', padding: 4 }}>{column.name}</th>)}</tr></thead>
-          <tbody>{preview.rows.slice(0, 5).map((row, i) => <tr key={i}>{preview.columns.slice(0, 4).map((column, j) => <td key={j} style={{ padding: 4 }}>{String(row[column.name] ?? '')}</td>)}</tr>)}</tbody>
+          <tbody>{preview.rows.slice(0, 5).map((row, i) => <tr key={i}>{preview.columns.slice(0, 4).map((column, j) => {
+            const cell = row[column.name]
+            const display = cell instanceof Date ? cell.toISOString() : String(cell ?? '')
+            return <td key={j} style={{ padding: 4 }}>{display}</td>
+          })}</tr>)}</tbody>
         </table>
+        {!preview.columns.some(column => column.type === 'number') && (
+          <MetaText>No numeric column inferred automatically — apply and set a column type to Number in the Data table if needed.</MetaText>
+        )}
         <MetaText>First 5 rows and 4 columns. Applying replaces the shared data; Undo restores it.</MetaText>
       </div>}
       {impacts.length > 0 && <div role="status" style={{ overflowWrap: 'anywhere' }}>

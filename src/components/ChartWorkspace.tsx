@@ -30,7 +30,7 @@ import type { ChartSession } from '../hooks/useChartSession'
 import { useElementSize } from '../hooks/useElementSize'
 import { usePanelOpen } from '../hooks/usePanelOpen'
 import { compactPart } from '../hooks/useCompactInRoom'
-import { ChartCanvas } from './ChartCanvas'
+import { ChartCanvas, type ZoomDomain } from './ChartCanvas'
 import { ChartCaption } from './ChartCaption'
 import { ControlsPanel } from './ControlsPanel'
 import { DataPanel } from './DataPanel'
@@ -39,6 +39,7 @@ import { FormsRail } from './FormsRail'
 import { SecondLookPanel } from './SecondLookPanel'
 import { SheetView } from './SheetView'
 import { TableDrawer } from './TableDrawer'
+import { SAMPLE_DATASETS } from '../lib/sampleDatasets'
 import { enterprise } from '../enterpriseLook'
 import { quiet } from '../ui/look'
 
@@ -393,6 +394,8 @@ export function ChartWorkspace({
   const [interactionMode, setInteractionMode] =
     useState<InteractionMode>('read')
   const [interactionResetToken, setInteractionResetToken] = useState(0)
+  const [zoomDomain, setZoomDomain] = useState<ZoomDomain | null>(null)
+  const [visualZoom, setVisualZoom] = useState(1)
   const [tableOpen, setTableOpen] = useState(false)
   // The controls column can be closed so the chart takes the room; the
   // choice is remembered across reloads.
@@ -410,9 +413,46 @@ export function ChartWorkspace({
   const showPanel = (next: typeof panel) => { setPanel(next); setControlsOpen(true) }
   const [panel, setPanel] = useState<'data' | 'chart' | 'style' | 'review' | 'export'>(session.table.rows.length ? 'chart' : 'data')
 
+  useEffect(() => {
+    setZoomDomain(null)
+    setVisualZoom(1)
+  }, [
+    session.sheet.focusedId,
+    session.spec.chart.type,
+    session.spec.chart.encodings,
+    session.spec.chart.axes,
+    session.spec.chart.transform,
+    session.spec.chart.facet,
+    session.table,
+    interactionResetToken,
+  ])
+
+  const resetZoom = () => {
+    setZoomDomain(null)
+    setVisualZoom(1)
+    setInteractionResetToken(value => value + 1)
+  }
+
+  const applySampleCsv = (csv: string) => {
+    const firstImport = session.table.rows.length === 0
+    session.setPastedText(csv, { resetChart: true })
+    if (firstImport && session.sheet.charts[0]) {
+      session.focusChart(session.sheet.charts[0].id)
+      setPanel('chart')
+    }
+  }
+
   const geometry = useMemo(
-    () => computeChartGeometry(session.table, session.spec, size),
-    [session.table, session.spec, size],
+    () =>
+      computeChartGeometry(
+        session.table,
+        session.spec,
+        size,
+        zoomDomain
+          ? { xDomain: zoomDomain.x, yDomain: zoomDomain.y, exactDomain: true }
+          : undefined,
+      ),
+    [session.table, session.spec, size, zoomDomain],
   )
   const facets = useMemo(
     () => facetLayout(session.table, session.spec, size),
@@ -448,6 +488,11 @@ export function ChartWorkspace({
         event.preventDefault()
         if (event.shiftKey) session.redo()
         else session.undo()
+        return
+      }
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        session.redo()
         return
       }
       if (target?.closest('button, [role=combobox], [role=menu], [role=dialog]')) return
@@ -530,8 +575,13 @@ export function ChartWorkspace({
             </StyledChartMeta>
           </StyledHeaderTitle>
           <StyledHeaderActions>
+            {!onSheet && (zoomDomain !== null || visualZoom > 1) ? (
+              <StyledHeaderExportButton type="button" onClick={resetZoom}>
+                Reset zoom
+              </StyledHeaderExportButton>
+            ) : null}
             <StyledHeaderExportButton aria-label="Undo" title="Undo (⌘/Ctrl Z)" disabled={!session.canUndo} onClick={session.undo}>Undo</StyledHeaderExportButton>
-            <StyledHeaderExportButton aria-label="Redo" title="Redo (⌘/Ctrl Shift Z)" disabled={!session.canRedo} onClick={session.redo}>Redo</StyledHeaderExportButton>
+            <StyledHeaderExportButton aria-label="Redo" title="Redo (⌘/Ctrl Shift Z / Ctrl Y)" disabled={!session.canRedo} onClick={session.redo}>Redo</StyledHeaderExportButton>
             {onSheet ? null : (
               <StyledHeaderExportButton
                 onClick={() => session.focusChart(null)}
@@ -637,7 +687,21 @@ export function ChartWorkspace({
               )}
             >
               {session.table.rows.length === 0 ? (
-                <EmptyState title="Turn your data into a chart" message="Import a file or paste a table in the Data panel, then Apply data." />
+                <StyledEmptyStage>
+                  <EmptyState title="Turn your data into a chart" message="Import a file, paste a table in the Data panel, or try a sample dataset." />
+                  <StyledSampleButtons aria-label="Load a sample dataset">
+                    {SAMPLE_DATASETS.map(sample => (
+                      <StyledHeaderExportButton
+                        key={sample.id}
+                        type="button"
+                        title={sample.description}
+                        onClick={() => applySampleCsv(sample.csv)}
+                      >
+                        {sample.label}
+                      </StyledHeaderExportButton>
+                    ))}
+                  </StyledSampleButtons>
+                </StyledEmptyStage>
               ) : onSheet ? (
                 <SheetView
                   sheet={session.sheet}
@@ -646,6 +710,7 @@ export function ChartWorkspace({
                   onAdd={session.addChart}
                   onDuplicate={session.duplicateChart}
                   onRemove={session.removeChart}
+                  onMove={session.moveChart}
                 />
               ) : facets ? (
                 <FacetCanvas
@@ -667,6 +732,10 @@ export function ChartWorkspace({
                   spec={session.spec}
                   interactionMode={interactionMode}
                   resetToken={interactionResetToken}
+                  chartKey={session.sheet.focusedId}
+                  zoomDomain={zoomDomain}
+                  onZoomDomainChange={setZoomDomain}
+                  onVisualZoomChange={setVisualZoom}
                   onAddAnnotation={session.addAnnotation}
                 />
               )}
@@ -708,4 +777,20 @@ const StyledFiguresBehind = styled.p`
   ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
   color: var(--purechart-warning, #a15c00);
   button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+`
+
+const StyledEmptyStage = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+`
+
+const StyledSampleButtons = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 `

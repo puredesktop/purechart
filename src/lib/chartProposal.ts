@@ -41,13 +41,14 @@ export function createChartProposal(chartId: string | null, current: ChartSpec, 
   if (!chartId) throw new Error('Choose a chart before proposing changes.')
   if (typeof input.explanation !== 'string' || !input.explanation.trim()) throw new Error('Explain why these changes help the chart.')
   if (!input.patch || typeof input.patch !== 'object' || Array.isArray(input.patch)) throw new Error('Provide a chart patch.')
-  const supported = new Set(['title', 'type', 'x', 'y', 'series', 'style', 'axes', 'facet', 'transform', 'presentation', 'annotations', 'caption'])
+  const supported = new Set(['title', 'type', 'x', 'y', 'series', 'size', 'limitSeries', 'style', 'axes', 'facet', 'transform', 'presentation', 'annotations', 'caption'])
   for (const key of Object.keys(input.patch)) if (!supported.has(key)) throw new Error(`Unsupported proposal field: ${key}. Source data is edited in Data.`)
   const patch = input.patch
   if (patch.title !== undefined && typeof patch.title !== 'string') throw new Error('Title must be text.')
   if (patch.caption !== undefined && typeof patch.caption !== 'string') throw new Error('Caption must be text.')
   if (patch.type !== undefined && !CHART_TYPES.includes(patch.type)) throw new Error('Choose a supported chart type.')
-  for (const key of ['x', 'series'] as const) if (patch[key] !== undefined && patch[key] !== null && typeof patch[key] !== 'string') throw new Error(`${key} must name a column or be null.`)
+  for (const key of ['x', 'series', 'size'] as const) if (patch[key] !== undefined && patch[key] !== null && typeof patch[key] !== 'string') throw new Error(`${key} must name a column or be null.`)
+  if (patch.limitSeries !== undefined && (typeof patch.limitSeries !== 'number' || !Number.isFinite(patch.limitSeries) || patch.limitSeries < 0)) throw new Error('limitSeries must be a non-negative finite number.')
   if (patch.y !== undefined && (!Array.isArray(patch.y) || patch.y.some(value => typeof value !== 'string'))) throw new Error('Y must be a list of column names.')
   if (patch.annotations !== undefined && !Array.isArray(patch.annotations)) throw new Error('Annotations must be a list.')
   if (input.captionFindingIds !== undefined && (!Array.isArray(input.captionFindingIds) || input.captionFindingIds.some(id => typeof id !== 'string'))) throw new Error('Caption finding IDs must be a list of strings.')
@@ -66,12 +67,31 @@ export function createChartProposal(chartId: string | null, current: ChartSpec, 
   } })
   // Normalizers support legacy documents; a new proposal must not silently lose
   // an invalid field or clamp a requested setting without showing that change.
+  const normalizeExpected = (requested: unknown, path: string): unknown => {
+    if (
+      (path === 'axes.x.min' ||
+        path === 'axes.y.min' ||
+        path === 'axes.x.max' ||
+        path === 'axes.y.max') &&
+      requested === null
+    ) {
+      return undefined
+    }
+    if ((path === 'axes.x.scale' || path === 'axes.y.scale') && requested === 'linear') {
+      return undefined
+    }
+    if (path === 'presentation.trendline' && requested === null) {
+      return undefined
+    }
+    return requested
+  }
   const checkFields = (requested: unknown, actual: unknown, path: string): void => {
-    if (requested && typeof requested === 'object') {
-      if (!actual || typeof actual !== 'object' || Array.isArray(requested) !== Array.isArray(actual)) throw new Error(`Invalid ${path}.`)
-      if (Array.isArray(requested) && requested.length !== (actual as unknown[]).length) throw new Error(`Invalid ${path}.`)
-      for (const key of Object.keys(requested)) checkFields((requested as Record<string, unknown>)[key], (actual as Record<string, unknown>)[key], `${path}.${key}`)
-    } else if (requested !== actual) throw new Error(`Invalid ${path}: the requested value is unsupported.`)
+    const expected = normalizeExpected(requested, path)
+    if (expected && typeof expected === 'object') {
+      if (!actual || typeof actual !== 'object' || Array.isArray(expected) !== Array.isArray(actual)) throw new Error(`Invalid ${path}.`)
+      if (Array.isArray(expected) && expected.length !== (actual as unknown[]).length) throw new Error(`Invalid ${path}.`)
+      for (const key of Object.keys(expected)) checkFields((expected as Record<string, unknown>)[key], (actual as Record<string, unknown>)[key], `${path}.${key}`)
+    } else if (expected !== actual) throw new Error(`Invalid ${path}: the requested value is unsupported.`)
   }
   for (const key of ['style', 'axes', 'facet', 'transform', 'presentation', 'annotations', 'caption'] as const) {
     if (patch[key] !== undefined) checkFields(patch[key], next.chart[key], key)

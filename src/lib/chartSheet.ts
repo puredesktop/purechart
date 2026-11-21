@@ -6,10 +6,12 @@ import {
   CHART_SCHEMA_VERSION,
   defaultSpec,
   migrateSpec,
+  sanitizeCustomPalettes,
+  sanitizeData,
   type ChartData,
   type ChartSpec,
 } from './chartSpec'
-import type { ChartPalette } from './chartTheme'
+import { isChartPaletteId, type ChartPalette } from './chartTheme'
 
 /**
  * A document is a sheet of charts, not a chart.
@@ -198,11 +200,15 @@ export function migrateSheet(raw: unknown): ChartSheet {
   const value = (raw ?? {}) as Record<string, unknown>
   if (!Array.isArray(value.charts)) return sheetFromSpec(migrateSpec(raw))
 
+  const seenIds = new Set<string>()
   const charts = value.charts
     .map((entry): SheetChart | null => {
       const item = (entry ?? {}) as Record<string, unknown>
       const spec = migrateSpec(item.spec ?? item)
-      return { id: typeof item.id === 'string' ? item.id : chartId(), spec }
+      let id = typeof item.id === 'string' && item.id.trim() !== '' ? item.id : chartId()
+      while (seenIds.has(id)) id = chartId()
+      seenIds.add(id)
+      return { id, spec }
     })
     .filter((entry): entry is SheetChart => entry !== null)
 
@@ -210,21 +216,32 @@ export function migrateSheet(raw: unknown): ChartSheet {
 
   const first = charts[0]!.spec
   const palette = (value.palette ?? {}) as Record<string, unknown>
+  const custom = Array.isArray(palette.custom)
+    ? sanitizeCustomPalettes(palette.custom)
+    : first.chart.style.customPalettes
+  const paletteId =
+    typeof palette.id === 'string' &&
+    (isChartPaletteId(palette.id) || custom.some(entry => entry.id === palette.id))
+      ? palette.id
+      : first.chart.style.palette
+  const data =
+    value.data && typeof value.data === 'object' && !Array.isArray(value.data)
+      ? sanitizeData(value.data)
+      : first.data
+  const focusedId =
+    typeof value.focusedId === 'string' && seenIds.has(value.focusedId)
+      ? value.focusedId
+      : null
   return {
     schemaVersion: SHEET_SCHEMA_VERSION,
     title: typeof value.title === 'string' ? value.title : first.title,
-    data: (value.data as ChartData | undefined) ?? first.data,
+    data,
     palette: {
-      id:
-        typeof palette.id === 'string'
-          ? palette.id
-          : first.chart.style.palette,
-      custom: Array.isArray(palette.custom)
-        ? (palette.custom as ChartPalette[])
-        : first.chart.style.customPalettes,
+      id: paletteId,
+      custom,
     },
     charts,
-    focusedId: typeof value.focusedId === 'string' ? value.focusedId : null,
+    focusedId,
   }
 }
 

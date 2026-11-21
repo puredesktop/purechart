@@ -1,4 +1,4 @@
-import { computeChartGeometry, type ChartGeometry } from './chartLayout'
+import { computeChartGeometry, extentOf, type ChartGeometry } from './chartLayout'
 import type { ChartSpec } from './chartSpec'
 import type { DataTable } from './dataParse'
 
@@ -371,8 +371,9 @@ export function chartDescription(
   if (series.length === 1) {
     const only = series[0]!
     const values = only.points.map(point => point.value)
+    const [low, high] = extentOf(values)
     parts.push(
-      `${only.key}, from ${round(values[0]!)} to ${round(values[values.length - 1]!)}, low ${round(Math.min(...values))}, high ${round(Math.max(...values))}.`,
+      `${only.key}, from ${round(values[0]!)} to ${round(values[values.length - 1]!)}, low ${round(low)}, high ${round(high)}.`,
     )
   } else {
     parts.push(`${series.length} series.`)

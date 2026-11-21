@@ -64,6 +64,9 @@ export function computeRadialGeometry(
     const key = asCategory(row[xCol.name], detail)
     const value = asNumber(row[measure])
     if (key === null || value === null) continue
+    if (value < 0) {
+      return emptyGeometry(dims, 'A pie shows parts of a whole, so every value must be zero or more. Use bars for values that can go below zero.')
+    }
     totals.set(key, (totals.get(key) ?? 0) + value)
   }
   if (totals.size === 0) return emptyGeometry(dims, 'No numeric values to plot.')
@@ -90,7 +93,11 @@ export function computeRadialGeometry(
   const top = compact ? 8 : 58
   const bottom = compact ? 8 : 24
   const left = compact ? 8 : 64
-  const nameWidth = compact ? 0 : Math.min(220, Math.max(64, ...parts.map(part => part.key.length * CHAR)))
+  const maxPartNameWidth = parts.reduce(
+    (max, part) => Math.max(max, part.key.length * CHAR),
+    64,
+  )
+  const nameWidth = compact ? 0 : Math.min(220, maxPartNameWidth)
   // Name, then value, then share: the key is a small table, read across.
   const keyWidth = compact ? 0 : 18 + nameWidth + 16 + 84 + 16 + 48
   const available = Math.max(40, dims.height - top - bottom)
@@ -156,7 +163,7 @@ export function computeRadialGeometry(
     yPixelForValue: () => cy,
     yValueAtPixel: () => 0,
     xPad: 0,
-    yExtent: [0, Math.max(...parts.map(part => part.value))],
+    yExtent: [0, extentOf(parts.map(part => part.value))[1]],
     radial: {
       cx,
       cy,
@@ -200,13 +207,14 @@ export function computeHorizontalBarGeometry(
   const compact = options.compact ?? false
   const seriesCount = options.seriesSelection?.order.length ?? seriesData.length
   const legend = spec.chart.presentation?.legend ?? 'auto'
-  const legendTop = !compact && legend !== 'none' && (legend === 'auto' || legend === 'top') && seriesCount > 1
-  const longest = Math.max(4, ...categories.map(category => category.length))
+  const showLegend = !compact && legend !== 'none' && seriesCount > 1
+  const legendPosition = legend === 'auto' ? 'top' : legend
+  const longest = categories.reduce((max, category) => (category.length > max ? category.length : max), 4)
   const labelRoom = compact ? 10 : Math.min(dims.width * 0.38, longest * CHAR + 40)
   const plot = plotRectFor(dims, {
-    top: compact ? 8 : 58 + (legendTop ? seriesCount * 20 : 0),
-    right: compact ? 10 : 64,
-    bottom: compact ? 10 : 48,
+    top: compact ? 8 : 58 + (showLegend && legendPosition === 'top' ? seriesCount * 20 : 0),
+    right: (compact ? 10 : 64) + (showLegend && legendPosition === 'right' ? 100 : 0),
+    bottom: (compact ? 10 : 48) + (showLegend && legendPosition === 'bottom' ? seriesCount * 20 : 0),
     left: Math.max(compact ? 10 : 64, labelRoom),
   })
 

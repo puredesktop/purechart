@@ -32,6 +32,7 @@ interface SheetViewProps {
   onAdd: (spec: ChartSpec, label: string) => void
   onDuplicate: (id: string) => void
   onRemove: (id: string) => void
+  onMove?: (id: string, to: number) => void
 }
 
 export function SheetView({
@@ -41,6 +42,7 @@ export function SheetView({
   onAdd,
   onDuplicate,
   onRemove,
+  onMove,
 }: SheetViewProps): React.ReactElement {
   const gesture = useRef({x:0,y:0,dragged:false})
   const [dragError, setDragError] = useState<string | null>(null)
@@ -134,6 +136,30 @@ export function SheetView({
               if(full.message)throw new Error(full.message)
               return {name:`${card.spec.title || 'chart'}.svg`,alt:card.spec.title || 'Chart',caption:card.spec.chart.caption || undefined,dataUrl:svgAssetDataUrl(full.svg)}
             }} />
+            {onMove && cards.length > 1 ? (
+              <>
+                <StyledSmall
+                  type="button"
+                  data-card-action=""
+                  aria-label={`Move ${card.spec.title || `Chart ${index + 1}`} left`}
+                  title="Move left"
+                  disabled={index === 0}
+                  onClick={() => onMove(card.id, index - 1)}
+                >
+                  ←
+                </StyledSmall>
+                <StyledSmall
+                  type="button"
+                  data-card-action=""
+                  aria-label={`Move ${card.spec.title || `Chart ${index + 1}`} right`}
+                  title="Move right"
+                  disabled={index === cards.length - 1}
+                  onClick={() => onMove(card.id, index + 1)}
+                >
+                  →
+                </StyledSmall>
+              </>
+            ) : null}
             <StyledSmall type="button" data-card-action="" onClick={() => onDuplicate(card.id)}>
               Duplicate
             </StyledSmall>

@@ -1,4 +1,5 @@
 import { facetValues } from './chartFacet'
+import { asNumber } from './chartLayout'
 import type { ChartEncodings, ChartSpec, ChartType } from './chartSpec'
 import { CHART_PALETTES } from './chartTheme'
 import { axisColumns, type DataTable } from './dataParse'
@@ -125,7 +126,7 @@ export function suggestForms(
 
   if (measure && category) {
     const names = facetValues(table, category)
-    const longest = Math.max(0, ...names.map(name => name.length))
+    const longest = names.reduce((max, name) => (name.length > max ? name.length : max), 0)
     // Long names are cut to a few letters under a column; turned over, they
     // are written out in full.
     if (longest > 12 || names.length > 10) {
@@ -141,35 +142,47 @@ export function suggestForms(
         rank: 92,
       })
     }
-    const negative = table.rows.some(row => typeof row[measure] === 'number' && (row[measure] as number) < 0)
+    const measureValues = table.rows
+      .map(row => asNumber(row[measure]))
+      .filter((value): value is number => value !== null)
+    const negative = measureValues.some(value => value < 0)
+    const hasPositive = measureValues.some(value => value > 0)
     const fits = names.length >= 2 && names.length <= capacity
     add({
       type: 'pie',
       job: `What share of the total each ${singular(category)} has`,
       because: negative
         ? `${measure} goes below zero, and a negative share of a whole means nothing.`
-        : fits
-          ? `${names.length} parts of one total — few enough to compare by angle, and the key gives each share as a number.`
-          : names.length < 2
-            ? `Only one ${singular(category)}, so there is nothing to divide.`
-            : `${names.length} parts is more than angles can tell apart; the smallest would be summed into Other. Bars compare them better.`,
+        : !hasPositive
+          ? `Every ${measure} value is zero, so there is no whole to divide.`
+          : fits
+            ? `${names.length} parts of one total — few enough to compare by angle, and the key gives each share as a number.`
+            : names.length < 2
+              ? `Only one ${singular(category)}, so there is nothing to divide.`
+              : `${names.length} parts is more than angles can tell apart; the smallest would be summed into Other. Bars compare them better.`,
       encodings: encodings(category, [measure], null),
       facet: null,
-      supported: !negative && names.length >= 2,
-      rank: negative ? 0 : fits ? 65 : 20,
+      supported: !negative && hasPositive && names.length >= 2,
+      rank: negative || !hasPositive ? 0 : fits ? 65 : 20,
     })
   }
 
   if (shape.numerics.length >= 3) {
     const size = shape.numerics[2]!
+    const negativeSize = table.rows.some(row => {
+      const value = asNumber(row[size])
+      return value !== null && value < 0
+    })
     add({
       type: 'bubble',
       job: `Whether ${shape.numerics[0]} and ${shape.numerics[1]} move together, sized by ${size}`,
-      because: `Three numeric columns: two place each row, and the third becomes the bubble's area.`,
+      because: negativeSize
+        ? `${size} goes below zero, and bubble areas must be zero or more.`
+        : `Three numeric columns: two place each row, and the third becomes the bubble's area.`,
       encodings: { x: shape.numerics[0]!, y: [shape.numerics[1]!], series: null, size },
       facet: null,
-      supported: true,
-      rank: 55,
+      supported: !negativeSize,
+      rank: negativeSize ? 0 : 55,
     })
   }
 

@@ -108,8 +108,10 @@ function ChartDocumentApp({
   onViewportResourceHandled,
 }: ChartDocumentAppProps): React.ReactElement {
   const beforeOpenRef = useRef<() => Promise<void>>(async () => {})
+  const onSaveAsRef = useRef<(path: string, sheet: ReturnType<typeof emptySheet>, revision: string | null) => void>(() => {})
   const session = useChartSession({
     beforeOpen: () => beforeOpenRef.current(),
+    onSaveAs: (path, sheet, revision) => onSaveAsRef.current(path, sheet, revision),
     ready,
     appSettings,
     resource: viewportResource,
@@ -204,6 +206,13 @@ function ChartDocumentApp({
     bindingChainRef.current = next.catch(() => undefined)
     return next
   }, [])
+  onSaveAsRef.current = (path, savedSheet, revision) => {
+    boundPathRef.current = path
+    boundSheetRef.current = savedSheet
+    setSavePending(false)
+    lifecycleRef.current.syncAgreed(path, savedSheet, revision)
+    lifecycleRef.current.adopt(path, { title: savedSheet.title })
+  }
   beforeOpenRef.current = async () => {
     await synchronizeBinding()
     const current = sessionRef.current.liveSheet()
@@ -284,7 +293,12 @@ function ChartDocumentApp({
   // Deleting the bound document must detach the lifecycle first so a queued
   // autosave cannot resurrect the deleted file.
   const deleteChartDocument = useCallback(async (path: string) => {
-    if (boundPathRef.current === path) lifecycleRef.current.reset()
+    const clean = path.trim().replace(/\/+$/, '')
+    const bound = boundPathRef.current?.trim().replace(/\/+$/, '') ?? null
+    if (bound === clean) {
+      boundPathRef.current = null
+      lifecycleRef.current.reset()
+    }
     await sessionRef.current.deleteChartDocument(path)
   }, [])
 

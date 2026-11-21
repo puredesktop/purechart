@@ -19,6 +19,14 @@ export async function updateChartHandler(
   { arguments: args }: AgentToolInvokeContext,
 ): Promise<AgentToolHandlerResult> {
   const patch = readObjectArg(args, 'patch') ?? args
+  const limitSeries =
+    'limitSeries' in patch && patch.limitSeries !== undefined
+      ? patch.limitSeries === null
+        ? 0
+        : typeof patch.limitSeries === 'number'
+          ? patch.limitSeries
+          : Number.NaN
+      : undefined
   const spec = updateChartAgentSpec(context.spec, context.table, {
     title: readAgentToolStringArg(patch, 'title') ?? undefined,
     type: readAgentToolStringArg(patch, 'type') as never,
@@ -27,6 +35,7 @@ export async function updateChartHandler(
     series:
       'series' in patch ? readAgentToolStringArg(patch, 'series') : undefined,
     size: 'size' in patch ? readAgentToolStringArg(patch, 'size') : undefined,
+    limitSeries,
     style: readObjectArg(patch, 'style'),
   })
   context.applyChartSpec(spec, {

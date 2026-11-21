@@ -23,6 +23,11 @@ export interface SharedDocumentOptions<T> extends Omit<UseDocumentLifecycleOptio
   reload: (path: string) => void
 }
 
+export interface SharedDocumentLifecycle<T> extends DocumentLifecycle {
+  /** Synchronize the agreed baseline after an out-of-band save (e.g. Save As). */
+  syncAgreed: (path: string, document: T, revision: string | null) => void
+}
+
 const REVISION_FIELD = 'revision'
 /** The same content has the same revision, so saving what is already there changes nothing on disk. */
 function contentHash(text: string): string {
@@ -36,11 +41,12 @@ function contentHash(text: string): string {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
   return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0')
 }
-const stamped = (content: string): { text: string; revision: string } => {
+export const stampRevision = (content: string): { text: string; revision: string } => {
   const { [REVISION_FIELD]: _gone, ...rest } = JSON.parse(content) as Record<string, unknown>
   const revision = contentHash(JSON.stringify(rest))
   return { text: `${JSON.stringify({ ...rest, [REVISION_FIELD]: revision }, null, 2)}\n`, revision }
 }
+const stamped = stampRevision
 const revisionIn = (text: string): string | null => {
   const value = (JSON.parse(text) as Record<string, unknown>)[REVISION_FIELD]
   return typeof value === 'string' ? value : null
@@ -53,7 +59,7 @@ const revisionIn = (text: string): string | null => {
  * When the other copy saves first, this one takes what it did and merges it in: at once if this copy has unsaved work when
  * it hears of the change, and otherwise on the save the shell refused. A copy with nothing unsaved simply reloads.
  */
-export function useSharedDocument<T>(options: SharedDocumentOptions<T>): DocumentLifecycle {
+export function useSharedDocument<T>(options: SharedDocumentOptions<T>): SharedDocumentLifecycle<T> {
   const latest = useRef(options)
   latest.current = options
   const lifecycleRef = useRef<DocumentLifecycle | null>(null)
@@ -62,8 +68,11 @@ export function useSharedDocument<T>(options: SharedDocumentOptions<T>): Documen
   const writing = useRef<{ revision: string; content: string } | null>(null)
   const turns = useRef<Promise<unknown>>(Promise.resolve())
 
-  const contentPath = (path: string) => `${path.replace(/\/+$/, '')}/${latest.current.contentFile}`
   const isConditional = (path: string | null) => Boolean(path) && (latest.current.conditional?.(path!) ?? true)
+  const contentPath = (path: string) =>
+    isConditional(path)
+      ? `${path.replace(/\/+$/, '')}/${latest.current.contentFile}`
+      : path
 
   const lookAtDisk = useCallback(async (path: string) => {
     const text = await latest.current.read(contentPath(path))
@@ -108,7 +117,14 @@ export function useSharedDocument<T>(options: SharedDocumentOptions<T>): Documen
     onSaved: files => {
       const done = writing.current
       const path = lifecycleRef.current?.doc.path ?? agreed.current?.path
-      if (done && path) agreed.current = { path, document: latest.current.parse(done.content), revision: done.revision }
+      if (done && path) {
+        agreed.current = { path, document: latest.current.parse(done.content), revision: done.revision }
+      } else if (path && !isConditional(path)) {
+        const flat = files.find(file => file.name === null && typeof file.content === 'string')
+        if (flat && typeof flat.content === 'string') {
+          agreed.current = { path, document: latest.current.parse(flat.content), revision: null }
+        }
+      }
       latest.current.onSaved?.(files.map(file =>
         done && file.name === latest.current.contentFile ? { ...file, content: done.content } : file))
     },
@@ -125,10 +141,11 @@ export function useSharedDocument<T>(options: SharedDocumentOptions<T>): Documen
   })
   lifecycleRef.current = lifecycle
 
-  // Binding to a document: what is on disk now is what this copy starts from.
+  // Binding to a document: what is on disk now is what this copy starts from
+  // (including flat single files, so dirty external merges keep a real base).
   const path = lifecycle.doc.path
   useEffect(() => {
-    if (!path || !isConditional(path) || agreed.current?.path === path) return
+    if (!path || agreed.current?.path === path) return
     let current = true
     void lookAtDisk(path).then(seen => { if (current && agreed.current?.path !== path) agreed.current = seen }).catch(() => undefined)
     return () => { current = false }
@@ -140,5 +157,9 @@ export function useSharedDocument<T>(options: SharedDocumentOptions<T>): Documen
     if (refused && path) void takeInTheOtherCopy(path)
   }, [refused, path, takeInTheOtherCopy])
 
-  return lifecycle
+  const syncAgreed = useCallback((savedPath: string, document: T, revision: string | null) => {
+    agreed.current = { path: savedPath, document, revision }
+  }, [])
+
+  return { ...lifecycle, syncAgreed }
 }

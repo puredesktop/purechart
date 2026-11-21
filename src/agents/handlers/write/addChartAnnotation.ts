@@ -7,6 +7,7 @@ import type {
   AgentToolInvokeContext,
 } from '@purescience/platform-ui/bridge/react/usePlatformAgentTools'
 import {
+  AgentChartToolError,
   addChartAgentAnnotationSpec,
   getChartAgentChangeSummary,
 } from '../../../lib/agentChartTools'
@@ -14,17 +15,24 @@ import type { ChartAnnotation } from '../../../lib/chartSpec'
 import type { ChartAgentToolContext } from '../../context'
 import { readObjectArg } from '../args'
 
+let annotationSequence = 0
+
 export async function addChartAnnotationHandler(
   context: ChartAgentToolContext,
   { arguments: args }: AgentToolInvokeContext,
 ): Promise<AgentToolHandlerResult> {
   const raw = readObjectArg(args, 'annotation') ?? args
+  const text = typeof raw.text === 'string' ? raw.text.trim() : ''
+  if (!text) {
+    throw new AgentChartToolError('Annotation text is required.')
+  }
   const annotation = {
     ...raw,
+    text,
     id:
       typeof raw.id === 'string' && raw.id.trim()
-        ? raw.id
-        : `agent-${Date.now().toString(36)}`,
+        ? raw.id.trim()
+        : `agent-${Date.now().toString(36)}-${(++annotationSequence).toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     createdAt:
       typeof raw.createdAt === 'string' && raw.createdAt.trim()
         ? raw.createdAt
@@ -40,10 +48,18 @@ export async function addChartAnnotationHandler(
     facets && facets.panels.length > 0
       ? facets.panels.map(p => p.geometry)
       : [computeChartGeometry(context.table, spec, dims)]
-  validateChartAnnotations(
-    { ...spec, chart: { ...spec.chart, annotations: [annotation] } },
-    geometries,
-  )
+  try {
+    validateChartAnnotations(
+      { ...spec, chart: { ...spec.chart, annotations: [annotation] } },
+      geometries,
+    )
+  } catch (error) {
+    throw error instanceof AgentChartToolError
+      ? error
+      : new AgentChartToolError(
+          error instanceof Error ? error.message : String(error),
+        )
+  }
   context.applyChartSpec(spec, {
     table: context.table,
     status: 'Annotation saved',

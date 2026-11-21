@@ -178,14 +178,16 @@ export function fitTrend(
     }
   }
 
-  // A straight line is well conditioned in the data's own units, so its
-  // equation can be read off the axis directly; only curves are rescaled.
+  // Fit in normalized [0, 1] x-coordinates so huge timestamps (~1.7e12 ms)
+  // never lose precision in normal equations or intercept subtraction.
   if (degree === 1) {
-    const fit = polyfit(xs.map(x => x - lo), ys, 1)
+    const span = hi - lo
+    const unit = (x: number) => (x - lo) / span
+    const fit = polyfit(xs.map(unit), ys, 1)
     if (!fit) return { error: 'These points do not support a straight line.' }
-    const slope = fit[1]!
+    const slope = fit[1]! / span
     const intercept = fit[0]! - slope * lo
-    const predict = (x: number) => intercept + slope * x
+    const predict = (x: number) => fit[0]! + fit[1]! * unit(x)
     return {
       kind: 'linear',
       degree: 1,

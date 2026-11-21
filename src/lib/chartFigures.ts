@@ -41,6 +41,27 @@ export interface FigureRecord {
 
 const PALETTES: readonly FigurePalette[] = ['source', 'monochrome']
 
+/** Relative paths under a collection must stay inside it: no `..`, `.`, leading slashes, colons, or backslashes. */
+export function isSafeRelativePath(path: string): boolean {
+  if (!path || path.trim() !== path) return false
+  if (path.startsWith('/') || path.includes('\\') || path.includes('\0') || /^[a-zA-Z]:/.test(path)) return false
+  const segments = path.split('/')
+  if (segments[0]?.includes(':')) return false
+  return segments.every(segment => segment !== '' && segment !== '.' && segment !== '..')
+}
+
+/** Collection paths may be absolute Unix paths, but must not traverse with `.`/`..`, empty segments, colons, or backslashes. */
+export function isSafeCollectionPath(path: string): boolean {
+  if (!path || path.trim() !== path) return false
+  if (path.includes('\\') || path.includes('\0') || /^[a-zA-Z]:/.test(path)) return false
+  const trimmed = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path
+  const body = trimmed.startsWith('/') ? trimmed.slice(1) : trimmed
+  if (!body) return false
+  const segments = body.split('/')
+  if (segments[0]?.includes(':')) return false
+  return segments.every(segment => segment !== '' && segment !== '.' && segment !== '..')
+}
+
 /** The records in the file, keeping only what reads as a figure. */
 export function parseFigures(text: string | null | undefined): FigureRecord[] {
   if (!text) return []
@@ -52,6 +73,7 @@ export function parseFigures(text: string | null | undefined): FigureRecord[] {
       if (typeof item !== 'object' || item === null) return []
       const entry = item as Record<string, unknown>
       if (typeof entry.collectionPath !== 'string' || typeof entry.relativePath !== 'string') return []
+      if (!isSafeCollectionPath(entry.collectionPath) || !isSafeRelativePath(entry.relativePath)) return []
       if (typeof entry.fingerprint !== 'string' || (entry.format !== 'svg' && entry.format !== 'png')) return []
       const number = (key: string, fallback: number) =>
         typeof entry[key] === 'number' && Number.isFinite(entry[key]) && (entry[key] as number) > 0 ? (entry[key] as number) : fallback

@@ -8,8 +8,10 @@ import { SelectField } from './SelectField'
 
 function NumberField({ label, value, onChange }: { label: string; value: number | null | undefined; onChange: (value: number | null) => void }) {
   return <label>{label}<input aria-label={label} type="number" placeholder="Auto" key={String(value)} defaultValue={value ?? ''} onBlur={event => {
-    const raw = event.currentTarget.value
+    const raw = event.currentTarget.value.trim()
     const next = raw === '' ? null : Number(raw)
+    const current = value ?? null
+    if (next === current) return
     if (next === null || Number.isFinite(next)) onChange(next)
   }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
 }
@@ -61,7 +63,23 @@ export function PresentationPanel({ session }: { session: ChartSession }) {
     <details><summary>Edit annotations ({spec.chart.annotations.length})</summary>
       {!spec.chart.annotations.length && <p>Double-click a chart point to add an annotation.</p>}
       {spec.chart.annotations.map(annotation => <div key={annotation.id}>
-        <input aria-label={`Annotation ${annotation.text}`} defaultValue={annotation.text} key={annotation.text} onBlur={event => session.applyChartSpec({ ...spec, chart: { ...spec.chart, annotations: spec.chart.annotations.map(a => a.id === annotation.id ? { ...a, text: event.target.value } : a) } }, { table: session.table })} />
+        <input
+          aria-label={`Annotation ${annotation.text}`}
+          defaultValue={annotation.text}
+          key={`${annotation.id}:${annotation.text}`}
+          onBlur={event => {
+            const nextText = event.target.value.trim()
+            if (!nextText) {
+              event.target.value = annotation.text
+              return
+            }
+            if (nextText === annotation.text) return
+            session.applyChartSpec(
+              { ...spec, chart: { ...spec.chart, annotations: spec.chart.annotations.map(a => a.id === annotation.id ? { ...a, text: nextText } : a) } },
+              { table: session.table },
+            )
+          }}
+        />
         <button aria-label={`Remove annotation ${annotation.text}`} onClick={() => session.applyChartSpec({ ...spec, chart: { ...spec.chart, annotations: spec.chart.annotations.filter(a => a.id !== annotation.id) } }, { table: session.table })}>Remove</button>
       </div>)}
     </details>

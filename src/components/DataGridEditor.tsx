@@ -60,7 +60,7 @@ export function DataGridEditor({ table, sourceText, onEdit, columnTypes = {}, fo
                   onCommit={value => onEdit({ kind: 'cell', row: index, column, value })}
                   onPaste={event => {
                     const text = event.clipboardData.getData('text/plain')
-                    if (text.includes('\t') || text.includes('\n')) { event.preventDefault(); onEdit({ kind: 'paste', row: index, column, text }) }
+                    if (text.includes('\t') || text.includes('\n')) { event.preventDefault(); onEdit({ kind: 'paste', row: index, column, text, expandColumns: true }) }
                   }} />
               </td>)}
               <td><button aria-label={`Delete row ${index + 1}`} onClick={() => onEdit({ kind: 'remove-row', row: index })}>Delete</button></td>

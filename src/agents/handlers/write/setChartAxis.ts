@@ -30,11 +30,18 @@ export async function setChartAxisHandler(
   }
 
   const current = context.spec.chart.axes[axis]
-  const name = readAgentToolStringArg(args, 'name')
-  const unit = readAgentToolStringArg(args, 'unit')
+  const hasName = Object.hasOwn(args, 'name') && (typeof args.name === 'string' || args.name === null)
+  const hasUnit = Object.hasOwn(args, 'unit') && (typeof args.unit === 'string' || args.unit === null)
+  const nextName = hasName
+    ? (typeof args.name === 'string' && args.name.trim() !== '' ? args.name.trim() : null)
+    : current.name
+  const nextUnit = hasUnit
+    ? (typeof args.unit === 'string' && args.unit.trim() !== '' ? args.unit.trim() : null)
+    : current.unit
   const next: ChartAxis = {
-    name: name === undefined ? current.name : name === '' ? null : name,
-    unit: unit === undefined ? current.unit : unit === '' ? null : unit,
+    ...current,
+    name: nextName,
+    unit: nextUnit,
     format: (format as ChartAxis['format'] | undefined) ?? current.format,
   }
 

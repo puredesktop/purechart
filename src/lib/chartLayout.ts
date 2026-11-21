@@ -141,6 +141,10 @@ export interface ChartGeometry {
    * it, or null when the label is not on this axis; y in both directions.
    */
   xPixelForLabel: (label: string) => number | null
+  /** Continuous X scales only: map pixel back to numeric/timestamp domain value (for domain zoom). */
+  xValueAtPixel?: (pixel: number) => number | null
+  /** Continuous X scales only: the data's own x extent, before any forced domain. */
+  xExtent?: [number, number]
   yPixelForValue: (value: number) => number
   yValueAtPixel: (pixel: number) => number
   /** Half the room one x position owns — how far a range extends past its end points. */
@@ -521,12 +525,12 @@ function isBarLike(type: ChartType): boolean {
 }
 
 /** Per-category totals of a stacked chart: positive and negative stacks apart. */
-function stackedTotals(seriesData: SeriesData[]): number[] {
+function stackedTotals(seriesData: SeriesData[], xDetail: DateDetail): number[] {
   const above = new Map<string, number>()
   const below = new Map<string, number>()
   for (const data of seriesData) {
     for (const value of data.values) {
-      const key = xKey(value.xRaw)
+      const key = asCategory(value.xRaw, xDetail) ?? ''
       const stack = value.y >= 0 ? above : below
       stack.set(key, (stack.get(key) ?? 0) + value.y)
     }
@@ -549,6 +553,8 @@ export interface GeometryOptions {
    */
   yDomain?: [number, number]
   xDomain?: [number, number]
+  /** When true (domain zoom), keep xDomain/yDomain exact without nice() snapping. */
+  exactDomain?: boolean
   xCategories?: string[]
   /** Date label detail for the x column, when panels must share it. */
   xDateDetail?: DateDetail
@@ -630,15 +636,22 @@ export function computeChartGeometry(
   const legend = spec.chart.presentation?.legend ?? 'auto'
   const showLegend = legend !== 'none' && (legend !== 'auto' || isBarLike(type))
   const legendPosition = legend === 'auto' ? 'top' : legend
+  const showRightLegend = !options.compact && showLegend && legendPosition === 'right'
   const baseMargins = options.compact ? COMPACT_MARGINS : DEFAULT_MARGINS
-  const directLabelSpace = !options.compact && style.directLabels && !isBarLike(type)
-    ? Math.min(240, dims.width * .3, Math.max(...seriesData.map(series => series.key.length * 7 + 24))) : 0
+  const maxDirectLabelWidth = seriesData.reduce(
+    (max, series) => Math.max(max, series.key.length * 7 + 24),
+    0,
+  )
+  const directLabelSpace =
+    !options.compact && style.directLabels && !isBarLike(type) && !showRightLegend
+      ? Math.min(240, dims.width * 0.3, maxDirectLabelWidth)
+      : 0
   const plot = plotRectFor(dims, {
     ...baseMargins,
     top:
       baseMargins.top +
       (!options.compact && showLegend && legendPosition === 'top' ? seriesCount * 20 : 0),
-    right: Math.max(baseMargins.right, directLabelSpace) + (!options.compact && showLegend && legendPosition === 'right' ? 100 : 0),
+    right: Math.max(baseMargins.right, directLabelSpace) + (showRightLegend ? 100 : 0),
     bottom: baseMargins.bottom + (!options.compact && showLegend && legendPosition === 'bottom' ? seriesCount * 20 : 0),
   })
   const allY = seriesData.flatMap(series => series.values.map(v => v.y))
@@ -651,7 +664,7 @@ export function computeChartGeometry(
   // y domain must hold the per-category totals (positive and negative
   // stacks separately), not the individual values.
   const stacked = type === 'stacked-bar'
-  const stackTotals = stacked ? stackedTotals(seriesData) : null
+  const stackTotals = stacked ? stackedTotals(seriesData, xDetail) : null
   const errorBars = spec.chart.presentation?.errorBars
   if (errorBars && (spec.chart.encodings.y.length !== 1 || ['histogram', 'stacked-bar'].includes(type))) return emptyGeometry(dims, 'Error bars require one Y measure on an unstacked chart.')
   if (errorBars && seriesData.some(series => series.values.some(value => !value.row))) return emptyGeometry(dims, 'Error bounds cannot be combined when series are folded into Other. Show individual series or use facets.')
@@ -677,7 +690,7 @@ export function computeChartGeometry(
   const yScale = (logY ? scaleLog() : scaleLinear())
     .domain([yMin, yMax === yMin ? (logY ? yMin * 10 : yMin + 1) : yMax])
     .range([plot.bottom - inset, plot.top + inset])
-  if (axisY.min == null && axisY.max == null) yScale.nice()
+  if (axisY.min == null && axisY.max == null && !options.exactDomain) yScale.nice()
 
   const banded = histogram || (xCol !== null && useBand(type, xCol))
 
@@ -689,6 +702,8 @@ export function computeChartGeometry(
   let xFrameEnd: number
   let bandwidth = 0
   let xPixelForLabel: (label: string) => number | null
+  let xValueAtPixel: ((pixel: number) => number | null) | undefined
+  let xExtent: [number, number] | undefined
   let xPad = 6
   // Trendlines are fitted in data units: categories by their position,
   // dates as milliseconds, numbers as themselves.
@@ -767,6 +782,7 @@ export function computeChartGeometry(
       .filter((n): n is number => n !== null)
     const axisX = spec.chart.axes.x
     const [xMinData, xMaxData] = extentOf(xNums)
+    xExtent = [xMinData, xMaxData]
     const xLo = axisX.min ?? options.xDomain?.[0] ?? xMinData
     const xHi = axisX.max ?? options.xDomain?.[1] ?? xMaxData
     if (xLo > xHi || (xLo === xHi && (axisX.min != null || axisX.max != null))) return emptyGeometry(dims, 'X bounds must increase.')
@@ -774,10 +790,11 @@ export function computeChartGeometry(
     if (xColumn.type === 'date') {
       // Times of day are read in UTC, as the labels asCategory produces are.
       const intraday = xDetail !== 'day'
+      const domainHi = xHi === xLo ? xLo + (intraday ? 60_000 : 86_400_000) : xHi
       const scale = (intraday ? scaleUtc() : scaleTime())
-        .domain([new Date(xLo), new Date(xHi)])
+        .domain([new Date(xLo), new Date(domainHi)])
         .range([plot.left + inset, plot.right - inset])
-      if (axisX.min == null && axisX.max == null) scale.nice()
+      if (axisX.min == null && axisX.max == null && !options.exactDomain) scale.nice()
       const ticks = scale.ticks(6)
       xPos = raw => {
         const n = asNumber(raw)
@@ -787,6 +804,10 @@ export function computeChartGeometry(
       xFrameStart = scale(new Date(xLo))
       xFrameEnd = scale(new Date(xHi))
       trendPixel = x => scale(new Date(x))
+      xValueAtPixel = pixel => {
+        const inverted = scale.invert(pixel).getTime()
+        return Number.isFinite(inverted) ? inverted : null
+      }
       // Date labels are the ISO day or moment asCategory produced; parse them back.
       xPixelForLabel = label => {
         const at = parseDateLabel(label)
@@ -796,7 +817,7 @@ export function computeChartGeometry(
       const scale = (axisX.scale === 'log' ? scaleLog() : scaleLinear())
         .domain([xLo, xHi === xLo ? (axisX.scale === 'log' ? xLo * 10 : xLo + 1) : xHi])
         .range([plot.left + inset, plot.right - inset])
-      if (axisX.min == null && axisX.max == null) scale.nice()
+      if (axisX.min == null && axisX.max == null && !options.exactDomain) scale.nice()
       xPos = raw => {
         const n = asNumber(raw)
         return n === null ? null : scale(n)
@@ -807,6 +828,10 @@ export function computeChartGeometry(
       xFrameStart = scale(xLo)
       xFrameEnd = scale(xHi)
       trendPixel = x => scale(x)
+      xValueAtPixel = pixel => {
+        const inverted = scale.invert(pixel)
+        return Number.isFinite(inverted) ? inverted : null
+      }
       xPixelForLabel = label => {
         const n = asNumber(label)
         return n === null ? null : scale(n)
@@ -841,7 +866,8 @@ export function computeChartGeometry(
     if ('error' in fit) return { path: null, end: null, r2: null, equation: null, error: fit.error }
     const [lo, hi] = extentOf(pairs.map(pair => pair.x))
     const samples: Array<[number, number]> = []
-    const steps = fit.kind === 'linear' ? 1 : 80
+    const logAxis = logY || (!banded && spec.chart.axes.x.scale === 'log')
+    const steps = fit.kind === 'linear' && !logAxis ? 1 : 80
     for (let step = 0; step <= steps; step += 1) {
       const x = lo + ((hi - lo) * step) / steps
       const px = trendPixel(x)
@@ -932,7 +958,7 @@ export function computeChartGeometry(
         } } : {}),
       })
       if (barLike) {
-        const baseline = yScale(Math.max(0, yMin))
+        const baseline = yScale(Math.max(yMin, Math.min(0, yMax)))
         const y = Math.min(cy, baseline)
         const height = Math.abs(baseline - cy)
         bars.push({
@@ -953,7 +979,13 @@ export function computeChartGeometry(
         })
       }
     }
-    const last = points[points.length - 1]
+    if (type === 'line' || type === 'area') {
+      points.sort((a, b) => a.cx - b.cx)
+    }
+    let rightmost: PointGeometry | undefined = points[0]
+    for (const point of points) {
+      if (rightmost === undefined || point.cx >= rightmost.cx) rightmost = point
+    }
     const trend = trendSpec && trendable ? trendFor(data) : undefined
     return {
       ...(trend ? { trend } : {}),
@@ -968,8 +1000,8 @@ export function computeChartGeometry(
       // A bubble chart's last row is not the end of anything; its one
       // series is named by the title, several by the legend.
       label:
-        style.directLabels && last && !bubble
-          ? { x: last.cx + 6, y: last.cy, text: data.key }
+        style.directLabels && rightmost && !bubble && !showRightLegend
+          ? { x: rightmost.cx + 6, y: rightmost.cy, text: data.key }
           : null,
     }
   })
@@ -987,6 +1019,8 @@ export function computeChartGeometry(
     empty: false,
     message: null,
     xPixelForLabel,
+    ...(xValueAtPixel ? { xValueAtPixel } : {}),
+    ...(xExtent ? { xExtent } : {}),
     yPixelForValue: value => yScale(value),
     yValueAtPixel: pixel => yScale.invert(pixel),
     xPad,

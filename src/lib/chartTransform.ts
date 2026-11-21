@@ -45,6 +45,7 @@ export function transformChartData(source: DataTable, spec: ChartSpec): Transfor
       if (f.op === 'eq') return text(value) === f.value
       if (f.op === 'neq') return text(value) !== f.value
       if (f.op === 'contains') return text(value).toLowerCase().includes(f.value.toLowerCase())
+      if (f.value.trim() === '') return true
       const actual = value instanceof Date ? value.getTime() : typeof value === 'number' ? value : NaN
       const expected = value instanceof Date ? Date.parse(f.value) : Number(f.value)
       return Number.isFinite(actual) && Number.isFinite(expected) && (f.op === 'gt' ? actual > expected : actual < expected)
@@ -89,7 +90,10 @@ export function transformChartData(source: DataTable, spec: ChartSpec): Transfor
     const { column, direction } = config.sort
     entries.sort((a, b) => {
       const av = a.row[column], bv = b.row[column]
-      const result = av == null ? bv == null ? 0 : 1 : bv == null ? -1 : typeof av === 'number' && typeof bv === 'number' ? av - bv : text(av).localeCompare(text(bv), undefined, { numeric: true })
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      const result = typeof av === 'number' && typeof bv === 'number' ? av - bv : text(av).localeCompare(text(bv), undefined, { numeric: true })
       return result * (direction === 'asc' ? 1 : -1)
     })
   }

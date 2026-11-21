@@ -1,4 +1,5 @@
 import type { ChartAnnotation } from './chartSpec'
+import { extentOf } from './chartLayout'
 
 export type InteractionMode = 'read' | 'explore'
 
@@ -10,6 +11,9 @@ export interface InteractivePoint {
   xLabel: string
   seriesKey: string
   color: string
+  name?: string
+  size?: number
+  r?: number
 }
 
 export interface BrushRange {
@@ -109,8 +113,7 @@ export function summarizeBrush(
   if (selected.length === 0) return null
 
   const values = selected.map(point => point.value)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
+  const [min, max] = extentOf(values)
   const average = values.reduce((sum, value) => sum + value, 0) / values.length
   const change = selected[selected.length - 1].value - selected[0].value
 
