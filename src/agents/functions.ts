@@ -804,16 +804,16 @@ export const PURECHART_FUNCTIONS: readonly AppFunctionDefinition<ChartAgentToolC
       const hasCoreUpdate =
         args.title !== undefined ||
         args.type !== undefined ||
-        Object.hasOwn(args, 'x') ||
+        args.x !== undefined ||
         args.y !== undefined ||
-        Object.hasOwn(args, 'series') ||
-        Object.hasOwn(args, 'size') ||
+        args.series !== undefined ||
+        args.size !== undefined ||
         args.limitSeries !== undefined ||
         isObj(args.style)
 
       if (hasCoreUpdate) {
         const limitSeries =
-          Object.hasOwn(args, 'limitSeries') && args.limitSeries !== undefined
+          args.limitSeries !== undefined
             ? args.limitSeries === null
               ? 0
               : typeof args.limitSeries === 'number'
@@ -821,33 +821,23 @@ export const PURECHART_FUNCTIONS: readonly AppFunctionDefinition<ChartAgentToolC
                 : Number.NaN
             : undefined
 
+        const readNullableCol = (field: 'x' | 'series' | 'size') => {
+          const val = args[field]
+          if (val === undefined) return undefined
+          if (val === null) return null
+          if (typeof val === 'string') return val
+          throw new AgentChartToolError(`"${field}" must be a column name string or null.`)
+        }
+
         spec = updateChartAgentSpec(spec, ctx.table, {
           title: typeof args.title === 'string' ? args.title : undefined,
           type: asStr(args.type) as ChartSpec['chart']['type'] | undefined,
-          x: Object.hasOwn(args, 'x')
-            ? args.x === null
-              ? null
-              : typeof args.x === 'string'
-                ? args.x
-                : null
-            : undefined,
+          x: readNullableCol('x'),
           y: Array.isArray(args.y)
             ? args.y.filter((v): v is string => typeof v === 'string')
             : undefined,
-          series: Object.hasOwn(args, 'series')
-            ? args.series === null
-              ? null
-              : typeof args.series === 'string'
-                ? args.series
-                : null
-            : undefined,
-          size: Object.hasOwn(args, 'size')
-            ? args.size === null
-              ? null
-              : typeof args.size === 'string'
-                ? args.size
-                : null
-            : undefined,
+          series: readNullableCol('series'),
+          size: readNullableCol('size'),
           limitSeries,
           style: isObj(args.style)
             ? (args.style as Partial<ChartSpec['chart']['style']>)
@@ -871,7 +861,8 @@ export const PURECHART_FUNCTIONS: readonly AppFunctionDefinition<ChartAgentToolC
       // 5. Facet
       if (isObj(args.facet)) {
         const col =
-          args.facet.column === null || args.facet.column === ''
+          args.facet.column === null ||
+          (typeof args.facet.column === 'string' && args.facet.column.trim() === '')
             ? null
             : asStr(args.facet.column)
         if (col === null) {
@@ -992,6 +983,14 @@ export const PURECHART_FUNCTIONS: readonly AppFunctionDefinition<ChartAgentToolC
           : `Updated chart: ${spec.title}`
       if (mode === 'add') {
         ctx.addChart(spec, spec.title)
+        // Palette belongs to the sheet; if this call changed the palette (directly
+        // or via autoFixBlocking), persist the sheet palette onto the newly focused chart.
+        if (
+          ctx.spec.chart.style.palette !== spec.chart.style.palette ||
+          ctx.spec.chart.style.customPalettes !== spec.chart.style.customPalettes
+        ) {
+          ctx.applyChartSpec(spec, { table: ctx.table, status })
+        }
       } else {
         ctx.applyChartSpec(spec, { table: ctx.table, status })
       }
@@ -1409,7 +1408,7 @@ export const PURECHART_FUNCTIONS: readonly AppFunctionDefinition<ChartAgentToolC
           width,
           height,
         })
-        if (drawn.message) {
+        if (drawn.message && drawn.message !== sizeError) {
           blockers.push(`Render blocked: ${drawn.message}`)
         }
         for (const w of drawn.warnings) {

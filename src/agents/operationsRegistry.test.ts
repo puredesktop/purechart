@@ -366,6 +366,7 @@ describe('PureChart Operations Registry (Functions + Core + Extended Escape Hatc
     )
     expect(badSize.data.readyToExport).toBe(false)
     expect(badSize.data.blockers.length).toBeGreaterThan(0)
+    expect(badSize.data.charts[0].blockers).toHaveLength(0)
   })
 
   it('executes fn_buildAndReviewChart in update and add modes with axes, trendline, autoCaption, and autoFixBlocking', async () => {
@@ -406,13 +407,14 @@ describe('PureChart Operations Registry (Functions + Core + Extended Escape Hatc
     expect(built.data.trendFits).toHaveLength(2)
     expect(built.data.trendFits[0].r2).toBeGreaterThan(0.9)
 
-    // Add a second chart via autoSelectForm without disturbing the first
+    // Add a second chart via autoSelectForm with a sheet palette update without disturbing the first
     const added = JSON.parse(
       (
         await handlers.fn_buildAndReviewChart(
           invoke('fn_buildAndReviewChart', {
             mode: 'add',
             autoSelectForm: true,
+            palette: 'meadow',
             title: 'Second Reading',
           }),
         )
@@ -420,6 +422,24 @@ describe('PureChart Operations Registry (Functions + Core + Extended Escape Hatc
     )
     expect(added.ok).toBe(true)
     expect(getSheet().charts).toHaveLength(2)
+    expect(getSpec().chart.style.palette).toBe('meadow')
+
+    // Explicit undefined encodings leave existing encodings intact; invalid types fail cleanly
+    await handlers.fn_buildAndReviewChart(
+      invoke('fn_buildAndReviewChart', {
+        title: 'Still Preserves X',
+        x: undefined,
+        facet: { column: '   ' },
+      }),
+    )
+    expect(getSpec().chart.encodings.x).toBeTruthy()
+    expect(getSpec().chart.facet.column).toBeNull()
+
+    await expect(
+      handlers.fn_buildAndReviewChart(
+        invoke('fn_buildAndReviewChart', { x: 123 }),
+      ),
+    ).rejects.toThrow(AgentChartToolError)
 
     // Sheet-wide readiness check covers both charts
     const sheetReadiness = JSON.parse(
