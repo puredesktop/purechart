@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import manifest from '../../plugin.json'
+import { PURECHART_ATOMIC_TOOL_SCHEMAS } from '../agents/atomicToolSchemas'
 import { renderChartSvg, sanitizeSvgColor, stripTransient, stripTransientFallback } from './chartRender'
 import { migrateSheet, sheetFromSpec } from './chartSheet'
 import { isSafeCollectionPath, isSafeRelativePath, parseFigures } from './chartFigures'
@@ -261,9 +261,9 @@ describe('B. Agent tool bugs & manifest parity', () => {
     await expect(setChartCaptionHandler(ctx, invoke({}))).rejects.toThrow(AgentChartToolError)
   })
 
-  it('declares and applies limitSeries in setChartEncodings and plugin.json', async () => {
-    const tool = manifest.app.agents.tools.find(t => t.name === 'setChartEncodings')
-    expect(tool?.inputSchema.properties).toHaveProperty('limitSeries')
+  it('declares and applies limitSeries in setChartEncodings and atomicToolSchemas', async () => {
+    const tool = PURECHART_ATOMIC_TOOL_SCHEMAS.find(t => t.name === 'setChartEncodings')
+    expect((tool?.inputSchema as { properties?: Record<string, unknown> })?.properties).toHaveProperty('limitSeries')
 
     const { spec, table } = createChartAgentSpec({ dataText: 'x,a,b,c\n1,10,20,30\n2,15,25,35' })
     let applied = spec
@@ -291,7 +291,7 @@ describe('B. Agent tool bugs & manifest parity', () => {
       AgentChartToolError,
     )
 
-    const replaceTool = manifest.app.agents.tools.find(t => t.name === 'replaceChartData')
+    const replaceTool = PURECHART_ATOMIC_TOOL_SCHEMAS.find(t => t.name === 'replaceChartData')
     expect(replaceTool?.description).toMatch(/disappears/i)
   })
 
