@@ -87,6 +87,20 @@ a next step: the context to read, a type to choose, an encoding to
 infer, an assumption to state. Ending with "I could not determine what
 to plot" is a failure.
 
+### Operations: Composite Functions, Core Tools & Extended Escape Hatch
+
+PureChart exposes a 3-tier operation surface built on `@purescience/platform-ui/bridge/appFunctions`:
+
+1. **Composite App Functions (`fn_*`, always exposed — prefer these first)** collapse 3–11 atomic round-trips into one auditable call:
+   - `fn_chartWorkspaceBriefing` — single-call workspace briefing: open path, all charts on the sheet, focused spec + transform summary, per-column statistical profiles, sample rows, and ranked chart form recommendations.
+   - `fn_auditAndDescribeChart` — full Second Look perceptual colour/accessibility audit + arithmetic findings, spoken description, plotted series coordinates, trend fits, and editorial hygiene (for the focused chart or any `chartId`).
+   - `fn_buildAndReviewChart` — configure or add a publication-ready chart in one call (form selection, title, type, encodings, palette/custom palette, style, x/y axes, faceting, trendline, caption or `autoCaptionFromFindings`, optional `autoFixBlocking`) and immediately return the Second Look review and arithmetic findings.
+   - `fn_autoFixAndPolishChart` — close the Second Look loop deterministically (resolving blocking/check findings) and polish title, axes, and grounded caption in one call.
+   - `fn_batchAnnotateChart` — add or replace multiple point/range annotations with automatic value/range-summary resolution and all-or-nothing validation (`clearExisting: true` escalates to destructive).
+   - `fn_exportReadinessCheck` — verify SVG/PNG renderability, dimensions/scale, Second Look blockers, optional monochrome print legality, and editorial completeness before exporting.
+2. **Core Atomic Tools (always exposed):** `getChartContext`, `getChartData`, `openChart`, `createChart`, `proposeChart`, `saveChart`, `exportChart`.
+3. **Extended Specialist Tools (24 tools, on-demand):** Call `discoverAppTools` to search specialist atomic tools (`setChartTitle`, `setChartType`, `setChartEncodings`, `setChartPalette`, `setChartStyle`, `updateChart`, `chooseChartForm`, `applyChartFix`, `facetChart`, `setChartAxis`, `setChartTrendline`, `setChartCaption`, `listCharts`, `focusChart`, `duplicateChart`, `removeChart`, `replaceChartData`, `addChartAnnotation`, `clearChartAnnotations`, `getChartSpec`, `suggestChartForms`, `reviewChart`, `describeChart`, `deleteChartDocument`), then invoke read-only ones via `callExtendedReadTool` or mutating ones via `callExtendedTool` (`confirmDestructive: true` for destructive tools).
+
 ### The sheet
 
 A document is a sheet of charts over one table. The **data** and the
@@ -104,40 +118,13 @@ explicit direction.
 
 ### Building a chart
 
-1. `getChartContext` first — document path, data shape, current type,
-   encodings, annotation count. `getChartData` before changing
-   encodings or making data-dependent recommendations.
-2. Seed or replace data (`createChart` with `dataText`, or
-   `replaceChartData`).
-3. `suggestChartForms`, then `chooseChartForm`. The table decides which
-   forms it can honestly support; a type chosen without asking will
-   draw whatever it is given, including things that mislead. Use
-   `updateChart` or the focused `set*` tools to adjust from there.
-4. **`reviewChart`, and fix what it names.** You cannot tell from a
-   spec whether two series can be told apart — it is a measurement, and
-   this is the tool that takes it. Apply what it offers with
-   `applyChartFix`, which returns the fresh review. Repeat until
-   nothing blocking is left. Never report a chart as done without
-   having run it.
-5. Annotate what matters: `addChartAnnotation` to call out the point
-   the user cares about; `clearChartAnnotations` only on request.
-6. `describeChart`, then `setChartCaption`. The arithmetic is what makes
-   a caption true; you are what makes it worth reading, and what can say
-   **why** something happened, which no amount of arithmetic can. Quote
-   the findings rather than reading a trend off the shape of the lines —
-   `setChartCaption` returns them again so a wrong claim is caught in the
-   same turn it was made.
-7. `saveChart` when the user wants the document kept; report the path.
-   `exportChart` when they want a file to use elsewhere — pass a
-   `destination` to place the figure in another document's package,
-   `width`/`height`/`scale` for the size the page needs, and
-   `palette: "monochrome"` for a one-ink print edition. Report the
-   path. Every export is a linked figure: the asset is tagged with this
-   chart, the chart it was drawn from and a fingerprint of the data, and
-   the package's `figures.json` remembers where it went and how it was
-   drawn, so the asset library can tell when the data has moved and the
-   chart can redraw the figure in place (Export → Redraw) rather than
-   leaving a stale picture in somebody's chapter.
+1. `fn_chartWorkspaceBriefing` (or `getChartContext` + `getChartData`) first — document path, sheet charts, data profiles, sample rows, and ranked form recommendations in one call.
+2. Seed or replace data (`createChart` with `dataText`, or extended `replaceChartData`).
+3. `fn_buildAndReviewChart` (or `proposeChart` for a user-reviewable preview) to choose a supported form, configure encodings/axes/palette/style/facet/trendline/caption, and get an immediate Second Look review in one call.
+4. **`fn_autoFixAndPolishChart` (or extended `reviewChart` + `applyChartFix`).** You cannot tell from a spec whether two series can be told apart — it is a measurement, and Second Look takes it. Never report a chart as done with unresolved blocking findings.
+5. Annotate what matters: `fn_batchAnnotateChart` to add validated point/range callouts in one call (or extended `addChartAnnotation` / `clearChartAnnotations`).
+6. Ground the caption in arithmetic: use `autoCaptionFromFindings: true` in `fn_buildAndReviewChart` / `fn_autoFixAndPolishChart`, or read `fn_auditAndDescribeChart` before writing a custom caption. Quote the findings rather than reading a trend off the shape of the lines.
+7. `fn_exportReadinessCheck` before exporting, then `saveChart` when the user wants the document kept and `exportChart` when they want an SVG or PNG file to use elsewhere — pass a `destination` to place the figure in another document's package, `width`/`height`/`scale` for the size the page needs, and `palette: "monochrome"` for a one-ink print edition. Report the path. Every export is a linked figure: the asset is tagged with this chart, the chart it was drawn from and a fingerprint of the data, and the package's `figures.json` remembers where it went and how it was drawn, so the asset library can tell when the data has moved and the chart can redraw the figure in place (Export → Redraw) rather than leaving a stale picture in somebody's chapter.
 
 ### Refining
 
